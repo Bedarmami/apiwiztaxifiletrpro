@@ -8,7 +8,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const GEMINI_KEY = process.env.GEMINI_KEY || "AIzaSyB14QAv8rgyKtlX-PGbetur0tMfkRLKHuc";
+const GEMINI_KEY = process.env.GEMINI_KEY;
 
 // Инициализация Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_KEY);
