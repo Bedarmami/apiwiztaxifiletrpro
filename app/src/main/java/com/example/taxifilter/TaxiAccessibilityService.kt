@@ -33,6 +33,23 @@ class TaxiAccessibilityService : AccessibilityService() {
         StatsManager.init(this)
         overlayController = OverlayController(this)
         registerReceiver(testReceiver, IntentFilter("com.example.taxifilter.TEST_ORDER"), Context.RECEIVER_NOT_EXPORTED)
+        
+        // Синхронизация при старте
+        DriverNetworkManager.syncData(this)
+        startPeriodicSync()
+    }
+
+    private var syncHandler = Handler(Looper.getMainLooper())
+    private var syncRunnable: Runnable? = null
+
+    private fun startPeriodicSync() {
+        syncRunnable = object : Runnable {
+            override fun run() {
+                DriverNetworkManager.syncData(this@TaxiAccessibilityService)
+                syncHandler.postDelayed(this, 300000) // 5 минут
+            }
+        }
+        syncHandler.postDelayed(syncRunnable!!, 300000)
     }
 
 
@@ -309,14 +326,14 @@ class TaxiAccessibilityService : AccessibilityService() {
         val netEarning = orderInfo.price - runningCost
         val hourlyRate = (netEarning / (totalMinutes / 60.0)).toInt()
 
-        val currentStrategy = prefs.getInt("current_strategy", 2)
         val isGood = when (currentStrategy) {
             1 -> hourlyRate >= (minHourlyRate * 1.3)
             2 -> hourlyRate >= minHourlyRate
             3 -> orderInfo.timeToClient <= 15 && hourlyRate >= (minHourlyRate * 0.7)
-            4 -> hourlyRate >= minHourlyRate && orderInfo.timeToClient <= maxTime && orderInfo.estimatedDistance <= maxDist
+            4 -> (hourlyRate >= minHourlyRate && orderInfo.timeToClient <= maxTime && orderInfo.estimatedDistance <= maxDist) || orderInfo.confidence >= 90
             else -> hourlyRate >= minHourlyRate
-        }
+        } || orderInfo.confidence >= 95 // Если мы на 95% уверены в адресе (обучен), то это почти всегда "Good"
+
 
         // ПОКАЗЫВАЕМ ПЛАШКУ! (если включена в настройках)
         val showOverlay = prefs.getBoolean("enable_overlay", true)

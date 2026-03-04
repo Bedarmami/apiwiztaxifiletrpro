@@ -16,6 +16,16 @@ object SmartLearningManager {
     private val whiteList = mutableSetOf<String>()
     private val ignoreCounter = mutableMapOf<String, Int>()
 
+    fun importCloudData(newWhite: List<String>, newBlack: List<String>) {
+        newWhite.forEach { learnFromSuccess(it) }
+        newBlack.forEach { word ->
+            val w = word.lowercase()
+            if (!whiteList.contains(w)) {
+                blackList.add(w)
+            }
+        }
+    }
+
     fun init(context: Context) {
         try {
             val file = File(context.filesDir, FILE_NAME)

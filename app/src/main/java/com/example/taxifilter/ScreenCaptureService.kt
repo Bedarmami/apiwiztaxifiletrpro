@@ -425,9 +425,9 @@ class ScreenCaptureService : Service() {
         val netEarning = orderInfo.price - runningCost
         val hourlyRate = (netEarning / (totalMinutes / 60.0)).toInt()
 
-        val isGood = hourlyRate >= minHourlyRate &&
-                     orderInfo.timeToClient <= maxTime &&
-                     orderInfo.estimatedDistance <= maxDist
+        val isGood = (hourlyRate >= minHourlyRate &&
+                      orderInfo.timeToClient <= maxTime &&
+                      orderInfo.estimatedDistance <= maxDist) || orderInfo.confidence >= 95
 
         overlayController?.showOrderInfo(
             hourlyRate = hourlyRate,

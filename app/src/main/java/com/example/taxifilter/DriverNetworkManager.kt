@@ -101,9 +101,10 @@ object DriverNetworkManager {
                 val response = api.getIntel().execute()
                 if (response.isSuccessful) {
                     val intel = response.body()
-                    intel?.whitelist?.forEach { SmartLearningManager.learnFromSuccess(it) }
-                    // В будущем можно добавить и бан-лист
-                    Log.d("Network", "Облачные данные загружены")
+                    if (intel != null) {
+                        SmartLearningManager.importCloudData(intel.whitelist, intel.blacklist)
+                        Log.d("Network", "Облачная база знаний синхронизирована: W=${intel.whitelist.size}, B=${intel.blacklist.size}")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("Network", "Sync failed: ${e.message}")

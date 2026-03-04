@@ -328,18 +328,21 @@ class OverlayController(private val context: Context) {
                 val tvK = v.findViewById<TextView>(R.id.tvKm)
                 val tvM = v.findViewById<TextView>(R.id.tvMinutes)
 
+                val isTrusted = confidence >= 85
+                val trustedPrefix = if (isTrusted) "🛡️ [TRUSTED] " else ""
+
                 if (isGolden) {
-                    verdictText = "💎 ЗОЛОТОЙ ТРАНЗИТ (БРАТЬ!)" + mlConfidenceText
+                    verdictText = "$trustedPrefix💎 ЗОЛОТОЙ ТРАНЗИТ (БРАТЬ!)" + mlConfidenceText
                     verdictColor = 0xFF00FF7F.toInt()
                     glowColor = 0x6600FF7F
                     tvRate?.setTextColor(0xFF00FF7F.toInt())
                 } else if (isDeadZone) {
-                    verdictText = "🗑 МЕРТВАЯ ЗОНА (ИГНОР)" + mlConfidenceText
+                    verdictText = "${trustedPrefix}🗑 МЕРТВАЯ ЗОНА (ИГНОР)" + mlConfidenceText
                     verdictColor = 0xFFAAAAAA.toInt()
                     glowColor = 0x88333333.toInt()
                     tvRate?.setTextColor(0xFFAAAAAA.toInt())
                 } else if (!isGoodOrder) {
-                    verdictText = when (currentStrategy) {
+                    verdictText = trustedPrefix + when (currentStrategy) {
                         1 -> "🚨 НЕ ВЫГОДНО (НИЗКИЙ ЧЕК)"
                         3 -> "⏳ СЛИШКОМ ДОЛГО (ДЛЯ %)"
                         4 -> "❌ ФИЛЬТР: НЕ СООТВЕТСТВУЕТ"
@@ -350,7 +353,7 @@ class OverlayController(private val context: Context) {
                     animatePulse = true
                     tvRate?.setTextColor(0xFFFF4D4D.toInt())
                 } else {
-                    verdictText = when(currentStrategy) {
+                    verdictText = trustedPrefix + when(currentStrategy) {
                         1 -> "🔥 ЖИРНЫЙ ЗАКАЗ!"
                         2 -> "⚖️ ХОРОШИЙ БАЛАНС"
                         3 -> "🛡️ ПОДХОДИТ ДЛЯ %"
