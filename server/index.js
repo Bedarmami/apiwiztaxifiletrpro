@@ -18,6 +18,25 @@ if (!GEMINI_KEY) {
 // Инициализация Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_KEY || "dummy_key");
 
+// Диагностика: Список доступных моделей напрямую через REST
+async function listModels() {
+    if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") return;
+    try {
+        const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${GEMINI_KEY}`);
+        const data = await response.json();
+        console.log("📋 Доступные модели Gemini для вашего ключа:");
+        if (data.models) {
+            data.models.forEach(m => console.log(` - ${m.name}`));
+        } else {
+            console.log("⚠️ Список моделей пуст или ошибка:", JSON.stringify(data));
+        }
+    } catch (e) {
+        console.error("❌ Не удалось получить список моделей:", e.message);
+    }
+}
+listModels();
+
 async function analyzeWithVision(base64Image) {
     if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") {
         console.warn("⚠️ Gemini AI пропущено: Ключ GEMINI_KEY не найден в переменных окружения (Variables)");
