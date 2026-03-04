@@ -273,9 +273,15 @@ async function smartAutoCorrect(order, screenshotBase64) {
     });
 
     // 3. Интеллектуальное сопоставление (из базы Intel)
-    if (dest && !isAutoVerified) {
-        const intelResult = await pool.query("SELECT keyword FROM intel WHERE type='whitelist'");
-        const whitelist = intelResult.rows.map(r => r.keyword.toLowerCase());
+    // 3. Если ИИ нашел адрес, считаем это верифицированным на 100%
+    if (aiResult && aiResult.destination) {
+        dest = aiResult.destination;
+        if (aiResult.pickup) pickup = aiResult.pickup;
+        isAutoVerified = true; // ИИ увидел своими глазами - значит верим!
+    } else {
+        // Проверка по списку слов (intel)
+        const { rows } = await pool.query("SELECT keyword FROM intel WHERE type='whitelist'");
+        const whitelist = rows.map(r => r.keyword.toLowerCase());
 
         for (const word of whitelist) {
             if (dest.toLowerCase().includes(word) && word.length > 3) {
