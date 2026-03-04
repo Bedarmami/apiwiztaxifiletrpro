@@ -40,8 +40,13 @@ listModels();
 async function analyzeWithVision(base64Image) {
     if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") return null;
 
-    // ЭКОНОМ-РЕЖИМ: Используем только Flash (бесплатно + быстро)
-    const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash-8b"];
+    // Используем модели, которые подтверждены диагностикой на вашем ключе
+    const modelsToTry = [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-2.0-flash-001"
+    ];
 
     for (const modelName of modelsToTry) {
         try {
