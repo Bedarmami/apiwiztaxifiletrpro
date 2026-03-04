@@ -259,10 +259,11 @@ async function smartAutoCorrect(order, screenshotBase64) {
     // 1. Попытка анализа через Gemini Vision (если есть скриншот)
     if (screenshotBase64) {
         const aiResult = await analyzeWithVision(screenshotBase64);
-        if (aiResult) {
-            if (aiResult.pickup && aiResult.pickup !== "null") pickup = aiResult.pickup;
-            if (aiResult.destination && aiResult.destination !== "null") dest = aiResult.destination;
-            isAutoVerified = true; // Если нейросеть "увидела", верим ей
+        if (aiResult && aiResult.destination) {
+            pickup = aiResult.pickup || pickup;
+            dest = aiResult.destination;
+            isAutoVerified = true;
+            console.log(`🤖 ИИ исправил адрес на: ${dest}`);
         }
     }
 
@@ -272,14 +273,8 @@ async function smartAutoCorrect(order, screenshotBase64) {
         if (dest.toLowerCase().includes(word)) dest = "";
     });
 
-    // 3. Если ИИ нашел адрес, считаем это истиной в последней инстанции
-    if (aiResult && aiResult.destination) {
-        dest = aiResult.destination;
-        if (aiResult.pickup) pickup = aiResult.pickup;
-        isAutoVerified = true;
-        console.log(`🤖 ИИ исправил адрес на: ${dest}`);
-    } else {
-        // Если ИИ не помог, проверяем по нашей базе Intel
+    // 3. Проверка по нашей базе Intel (если ИИ не подтвердил ранее)
+    if (!isAutoVerified) {
         const { rows } = await pool.query("SELECT keyword FROM intel WHERE type='whitelist'");
         const whitelist = rows.map(r => r.keyword.toLowerCase());
 
