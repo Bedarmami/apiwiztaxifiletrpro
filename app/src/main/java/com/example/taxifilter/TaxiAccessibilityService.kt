@@ -326,6 +326,8 @@ class TaxiAccessibilityService : AccessibilityService() {
         val netEarning = orderInfo.price - runningCost
         val hourlyRate = (netEarning / (totalMinutes / 60.0)).toInt()
 
+        val currentStrategy = prefs.getInt("current_strategy", 2)
+
         val isGood = when (currentStrategy) {
             1 -> hourlyRate >= (minHourlyRate * 1.3)
             2 -> hourlyRate >= minHourlyRate
