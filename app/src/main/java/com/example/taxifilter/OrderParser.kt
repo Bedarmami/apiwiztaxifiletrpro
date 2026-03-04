@@ -132,6 +132,8 @@ object OrderParser {
                            lower.contains("premium") || lower.contains("edition") || lower.contains("varsavia") ||
                            lower.contains("samsung") || lower.contains("telegram") || lower.contains("youtube") ||
                            lower.contains("music") || lower.contains("статистика") || lower.contains("папка") ||
+                           lower.contains("доход") || lower.contains("дохід") || lower.contains("чистый") || 
+                           lower.contains("следующий") || lower.contains("текущее") || lower.contains("место") ||
                            lower.contains("закрыть") || lower.contains("все") || 
                            lower.contains("отказ") || lower.contains("akceptuj") || lower.contains("принять")
             
@@ -147,10 +149,17 @@ object OrderParser {
         var destinationAddress: String? = null
         
         if (finalAddresses.size >= 2) {
-            destinationAddress = cleanAddress(finalAddresses.last())
+            val last = finalAddresses.last()
+            val secondLast = finalAddresses[finalAddresses.size - 2]
             
-            // Если вдруг первая и последняя строка совпали (дубль OCR), 
-            // а у нас есть средняя - пробуем взять среднюю
+            // Если последняя строка короткая (похожа на город), склеиваем её с предпоследней (улицей)
+            if (last.length < 15 && finalAddresses.size >= 2) {
+                destinationAddress = cleanAddress("$secondLast, $last")
+            } else {
+                destinationAddress = cleanAddress(last)
+            }
+            
+            // Если вдруг первая и последняя строка совпали (дубль OCR)
             if (pickupAddress == destinationAddress && finalAddresses.size > 2) {
                 destinationAddress = cleanAddress(finalAddresses[finalAddresses.size - 2])
             }
