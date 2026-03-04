@@ -304,13 +304,19 @@ async function smartAutoCorrect(order, screenshotBase64) {
     return { pickup, destination: dest, isVerified: isAutoVerified };
 }
 
+// Получение базы знаний (для приложения)
 app.get('/api/intel', async (req, res) => {
-    const white = await pool.query("SELECT keyword FROM intel WHERE type='whitelist'");
-    const black = await pool.query("SELECT keyword FROM intel WHERE type='blacklist'");
-    res.json({
-        whitelist: white.rows.map(r => r.keyword),
-        blacklist: black.rows.map(r => r.keyword)
-    });
+    try {
+        const white = await pool.query("SELECT keyword FROM intel WHERE type = 'whitelist'");
+        const black = await pool.query("SELECT keyword FROM intel WHERE type = 'blacklist'");
+
+        res.json({
+            whitelist: white.rows.map(r => r.keyword),
+            blacklist: black.rows.map(r => r.keyword)
+        });
+    } catch (e) {
+        res.status(500).json({ whitelist: [], blacklist: [] });
+    }
 });
 
 app.post('/api/orders', async (req, res) => {
