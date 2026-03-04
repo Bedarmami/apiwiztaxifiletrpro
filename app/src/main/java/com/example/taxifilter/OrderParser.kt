@@ -129,6 +129,10 @@ object OrderParser {
                            lower.contains("откуда") || lower.contains("куда") || lower.contains("пункт") ||
                            lower.contains("tekuu") || lower.contains("mecto") || lower.contains("h3haye") ||
                            lower.contains("destin") || lower.contains("pick") || lower.contains("arrival") ||
+                           lower.contains("premium") || lower.contains("edition") || lower.contains("varsavia") ||
+                           lower.contains("samsung") || lower.contains("telegram") || lower.contains("youtube") ||
+                           lower.contains("music") || lower.contains("статистика") || lower.contains("папка") ||
+                           lower.contains("закрыть") || lower.contains("все") || 
                            lower.contains("отказ") || lower.contains("akceptuj") || lower.contains("принять")
             
             (!isGarbage && line.length in 5..100)

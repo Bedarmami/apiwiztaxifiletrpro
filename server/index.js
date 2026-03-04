@@ -251,7 +251,10 @@ app.post('/api/activate', async (req, res) => {
 
 // 5. Синхронизация данных
 async function smartAutoCorrect(order, screenshotBase64) {
-    const garbage = ["отказ", "не повлияет", "процент", "принятия", "заказов", "akceptuj", "принять", "min", "km", "мин"];
+    const garbage = [
+        "отказ", "не повлияет", "процент", "принятия", "заказов", "akceptuj", "принять", "min", "km", "мин",
+        "premium", "edition", "varsavia", "samsung", "telegram", "youtube", "music", "статистика", "папка"
+    ];
     let pickup = order.pickup || "";
     let dest = order.destination || "";
     let isAutoVerified = false;
