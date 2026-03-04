@@ -17,4 +17,6 @@ local.properties
 # Server
 server/node_modules/
 server/public/uploads/
+server/.env
 .env
+*.log
