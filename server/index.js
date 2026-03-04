@@ -24,8 +24,14 @@ async function analyzeWithVision(base64Image) {
         return null;
     }
 
-    // Список моделей для попытки (иногда v1 требует конкретную версию)
-    const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-latest"];
+    // Расширенный список моделей для обхода региональных ограничений
+    const modelsToTry = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro",
+        "gemini-pro-vision" // старая версия, если новые не пускают
+    ];
 
     for (const modelName of modelsToTry) {
         try {
