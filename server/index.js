@@ -45,39 +45,33 @@ listModels();
 async function analyzeWithVision(base64Image) {
     if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") return null;
 
-    // Используем ТОЛЬКО те модели, которые твой ключ подтвердил в логах
+    // Используем модели, которые ТОЛЬКО ЧТО подтвердил ваш список в логах
     const modelsToTry = [
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-2.0-flash-001"
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash-exp"
     ];
 
     for (const modelName of modelsToTry) {
         try {
-            console.log(`🤖 Пробую модель: ${modelName}`);
-            // Использование v1 API через SDK
+            console.log(`🤖 Пробую самую новую модель: ${modelName}`);
             const model = genAI.getGenerativeModel({ model: modelName });
-            const prompt = "Ты - ассистент водителя. Найди адреса на скриншоте. Выведи ТОЛЬКО JSON: { \"pickup\": \"...\", \"destination\": \"...\" }";
+
+            // Упрощаем промпт для лучшей совместимости
+            const prompt = "Определи адрес подачи и адрес назначения на фото. Ответ в JSON: { \"pickup\": \"\", \"destination\": \"\" }";
 
             const result = await model.generateContent([
-                prompt,
+                { text: prompt },
                 { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
             ]);
 
             const response = await result.response;
             const text = response.text();
+            console.log(`✅ [AI SUCCESS] Ответила модель ${modelName}:`, text);
 
-            console.log(`✅ [AI SUCCESS] Модель: ${modelName}, Ответ: ${text}`);
-
-            // Пытаемся вытащить JSON из текста
-            const jsonStart = text.indexOf('{');
-            const jsonEnd = text.lastIndexOf('}');
-            if (jsonStart !== -1 && jsonEnd !== -1) {
-                const jsonStr = text.substring(jsonStart, jsonEnd + 1);
-                return JSON.parse(jsonStr);
-            }
-
-            return null;
+            const jsonMatch = text.match(/\{.*\}/s);
+            return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
         } catch (e) {
             console.error(`⚠️ Ошибка ${modelName}:`, e.message);
             if (e.message.includes("API_KEY_INVALID") || e.message.includes("expired")) {
