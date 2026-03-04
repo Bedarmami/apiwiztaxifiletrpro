@@ -17,19 +17,33 @@ if (!GEMINI_KEY) {
 
 // Инициализация Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_KEY || "dummy_key");
-const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Пробуем базовую модель
 
+// Улучшенный лог для дебага
 async function analyzeWithVision(base64Image) {
+    if (!GEMINI_KEY) {
+        console.warn("⚠️ Gemini AI пропущено: Нет ключа в .env");
+        return null;
+    }
+
     try {
+        console.log("🤖 Отправка скриншота в Gemini Vision...");
         const prompt = "Ты - ассистент водителя такси. Посмотри на скриншот заказа и выведи ТОЛЬКО JSON: { \"pickup\": \"адрес подачи\", \"destination\": \"адрес назначения\" }. Если адрес не виден, пиши null. Игнорируй надписи 'Отказ не повлияет' и т.д.";
+
         const result = await visionModel.generateContent([
             prompt,
             { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
         ]);
+
         const text = result.response.text();
+        console.log("📝 Ответ Gemini:", text);
         return JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
     } catch (e) {
-        console.error("Gemini Vision Error:", e);
+        if (e.status === 404) {
+            console.error("❌ Ошибка 404: Модель gemini-1.5-flash не найдена. Возможно, регион или ключ не поддерживает эту модель.");
+        } else {
+            console.error("Gemini Vision Error:", e.message);
+        }
         return null;
     }
 }
@@ -115,7 +129,15 @@ bot.command('gen', async (ctx) => {
     ctx.reply(`Ключ на ${days} дн.: \`${key}\``, { parse_mode: 'Markdown' });
 });
 
-bot.launch().then(() => console.log("Telegram Bot started"));
+bot.launch()
+    .then(() => console.log("Telegram Bot started"))
+    .catch((err) => {
+        if (err.response && err.response.error_code === 409) {
+            console.warn("⚠️ Telegram Bot: Конфликт 409 (уже запущен). Пропускаю запуск...");
+        } else {
+            console.error("❌ Telegram Bot Error:", err);
+        }
+    });
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
