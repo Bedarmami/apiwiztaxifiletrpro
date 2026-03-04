@@ -147,11 +147,17 @@ async function saveSettings() {
 }
 
 async function editOrder(id, type, currentVal) {
-    const newVal = prompt(`Исправить адрес ${type}:`, currentVal);
+    const newVal = prompt(`Исправить адрес ${type}:`, currentVal === 'null' ? '' : currentVal);
     if (newVal !== null) {
         const row = document.getElementById(`order-${id}`);
-        const pickup = type === 'pickup' ? newVal : row.querySelector('[onclick*="pickup"]').innerText.replace('A: ', '');
-        const dest = type === 'destination' ? newVal : row.querySelector('[onclick*="destination"]').innerText.replace('B: ', '');
+        // Очищаем префиксы и обрабатываем заглушки '---'
+        const getVal = (selector, prefix) => {
+            let val = row.querySelector(selector).innerText.replace(prefix, '').trim();
+            return (val === '---' || val === '') ? null : val;
+        };
+
+        const pickup = type === 'pickup' ? newVal : getVal('[onclick*="pickup"]', 'A: ');
+        const dest = type === 'destination' ? newVal : getVal('[onclick*="destination"]', 'B: ');
 
         await fetch(`/api/admin/orders/${id}/correct`, {
             method: 'POST',
@@ -164,8 +170,13 @@ async function editOrder(id, type, currentVal) {
 
 async function verifyOrder(id) {
     const row = document.getElementById(`order-${id}`);
-    const pickup = row.querySelector('[onclick*="pickup"]').innerText.replace('A: ', '');
-    const dest = row.querySelector('[onclick*="destination"]').innerText.replace('B: ', '');
+    const getVal = (selector, prefix) => {
+        let val = row.querySelector(selector).innerText.replace(prefix, '').trim();
+        return (val === '---' || val === '') ? null : val;
+    };
+
+    const pickup = getVal('[onclick*="pickup"]', 'A: ');
+    const dest = getVal('[onclick*="destination"]', 'B: ');
 
     await fetch(`/api/admin/orders/${id}/correct`, {
         method: 'POST',

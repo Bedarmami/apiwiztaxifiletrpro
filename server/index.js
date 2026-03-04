@@ -283,10 +283,11 @@ app.post('/api/admin/orders/:id/correct', async (req, res) => {
         [pickup, destination, id]
     );
 
-    // Авто-обучение: если мы исправили адрес, добавляем его в вайтлист сервера
+    // Авто-обучение: вытаскиваем ВСЕ слова длиннее 3 символов
     if (destination) {
-        const kw = destination.split(' ')[0].toLowerCase();
-        if (kw.length > 3) {
+        const words = destination.split(/[\s,.-]+/).filter(w => w.length > 3);
+        for (const w of words) {
+            const kw = w.toLowerCase();
             await pool.query("INSERT INTO intel (keyword, type) VALUES ($1, 'whitelist') ON CONFLICT DO NOTHING", [kw]);
         }
     }

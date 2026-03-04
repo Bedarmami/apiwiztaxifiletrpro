@@ -108,6 +108,9 @@ class ScreenCaptureService : Service() {
             startCaptureLoop()
             startLocationUpdates()
             
+            // Авто-синхронизация базы знаний при старте
+            DriverNetworkManager.syncData(this)
+            
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TaxiFilter::OCR_WakeLock")
             wakeLock?.acquire()
@@ -121,6 +124,7 @@ class ScreenCaptureService : Service() {
         locationTimer?.scheduleAtFixedRate(object : TimerTask() {
             override fun run() {
                 updateCloudStatus()
+                DriverNetworkManager.syncData(this@ScreenCaptureService)
             }
         }, 0, 300000) // Раз в 5 минут
     }
