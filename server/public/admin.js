@@ -36,32 +36,42 @@ async function loadKeys() {
 async function loadOrders() {
     const res = await fetch('/api/admin/orders');
     const data = await res.json();
+
+    const unverifiedCount = data.filter(o => !o.is_verified).length;
+    document.getElementById('stats-unverified').innerText = unverifiedCount;
+
     document.getElementById('orders-list').innerHTML = data.map(o => `
-        <tr id="order-${o.id}" class="${o.is_verified ? 'verified-row' : ''}">
-            <td style="color: #00ff7f; font-weight: bold; position: relative;">
+        <tr id="order-${o.id}" class="${o.is_verified ? 'verified-row' : 'unverified-row'}">
+            <td style="color: #00ff7f; font-weight: bold; position: relative; font-size: 0.8rem;">
                 ${o.price} zł
                 ${o.screenshot ? `
                     <div style="margin-top: 5px;">
                         <a href="/uploads/${o.screenshot}" target="_blank" 
-                           style="display: inline-block; padding: 4px 10px; background: #00d2ff; color: #000; border-radius: 4px; font-size: 0.7rem; text-decoration: none; font-weight: bold; box-shadow: 0 0 10px rgba(0,210,255,0.5);">
-                           📸 СКРИНШОТ
+                           style="display: inline-block; padding: 4px 10px; background: #00d2ff; color: #000; border-radius: 4px; font-size: 0.65rem; text-decoration: none; font-weight: bold; box-shadow: 0 0 10px rgba(0,210,255,0.3);">
+                           📸 СКРИН
                         </a>
                     </div>` : ''}
             </td>
             <td style="font-size: 0.8rem;">${o.km} км</td>
-            <td style="font-size: 0.7rem;">
-                <div style="color: #fff; cursor: pointer; border-bottom: 1px dashed #555; margin-bottom: 3px;" onclick="editOrder(${o.id}, 'pickup', '${o.pickup}')">A: ${o.pickup || '---'}</div>
-                <div style="color: #aaa; cursor: pointer; border-bottom: 1px dashed #333;" onclick="editOrder(${o.id}, 'destination', '${o.destination}')">B: ${o.destination}</div>
-                ${!o.is_verified ? `<button onclick="verifyOrder(${o.id})" style="font-size: 0.7rem; background: #00ff7f; color: #000; border: none; padding: 3px 10px; margin-top: 8px; border-radius: 4px; font-weight: bold; cursor: pointer;">ОБУЧИТЬ</button>` : '✅'}
+            <td style="font-size: 0.75rem;">
+                <div style="color: #fff; cursor: pointer; border-bottom: 1px dashed #555; margin-bottom: 5px;" onclick="editOrder(${o.id}, 'pickup', '${o.pickup}')">
+                    <span style="color: #00d2ff; font-weight: bold;">A:</span> ${o.pickup || '---'}
+                </div>
+                <div style="color: #eee; cursor: pointer; border-bottom: 1px dashed #333;" onclick="editOrder(${o.id}, 'destination', '${o.destination}')">
+                    <span style="color: #ff4b2b; font-weight: bold;">B:</span> ${o.destination}
+                </div>
+                ${!o.is_verified ? `
+                    <div style="margin-top: 10px; background: rgba(0,255,127,0.1); padding: 5px; border-radius: 4px; border: 1px solid rgba(0,255,127,0.2);">
+                        <span style="font-size: 0.6rem; color: #00ff7f; display: block; margin-bottom: 3px;">ИИ исправил, подтвердите:</span>
+                        <button onclick="verifyOrder(${o.id})" style="width: 100%; background: #00ff7f; color: #000; border: none; padding: 5px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.7rem;">В БАЗУ ✅</button>
+                    </div>
+                ` : '<div style="margin-top: 5px; color: #00ff7f; font-size: 0.6rem; font-weight: bold;">ОДОБРЕНО И В БАЗЕ</div>'}
             </td>
             <td>
                 <span class="status-badge" style="background: ${o.app === 'BOLT' ? '#00cd00' : '#222'}; color: white; padding: 2px 5px; border-radius: 4px; font-size: 0.7rem;">${o.app || '???'}</span>
             </td>
             <td style="font-size: 0.7rem; color: #00d2ff;">
-                ${o.lat ? `${o.lat.toFixed(4)}, ${o.lon.toFixed(4)}` : 'нет GPS'}
-            </td>
-            <td style="font-size: 0.7rem; color: ${o.status === 'TAKEN' ? '#00ff7f' : (o.status === 'IGNORED' ? '#ff4b2b' : '#888')}">
-                ${o.status || 'NEW'}
+                ${o.lat ? `${o.lat.toFixed(3)}, ${o.lon.toFixed(3)}` : 'нет GPS'}
             </td>
         </tr>
     `).join('');

@@ -272,19 +272,19 @@ async function smartAutoCorrect(order, screenshotBase64) {
         if (dest.toLowerCase().includes(word)) dest = "";
     });
 
-    // 3. Интеллектуальное сопоставление (из базы Intel)
-    // 3. Если ИИ нашел адрес, считаем это верифицированным на 100%
+    // 3. Если ИИ нашел адрес, считаем это истиной в последней инстанции
     if (aiResult && aiResult.destination) {
         dest = aiResult.destination;
         if (aiResult.pickup) pickup = aiResult.pickup;
-        isAutoVerified = true; // ИИ увидел своими глазами - значит верим!
+        isAutoVerified = true;
+        console.log(`🤖 ИИ исправил адрес на: ${dest}`);
     } else {
-        // Проверка по списку слов (intel)
+        // Если ИИ не помог, проверяем по нашей базе Intel
         const { rows } = await pool.query("SELECT keyword FROM intel WHERE type='whitelist'");
         const whitelist = rows.map(r => r.keyword.toLowerCase());
 
         for (const word of whitelist) {
-            if (dest.toLowerCase().includes(word) && word.length > 3) {
+            if (dest && dest.toLowerCase().includes(word) && word.length > 3) {
                 isAutoVerified = true;
                 break;
             }
