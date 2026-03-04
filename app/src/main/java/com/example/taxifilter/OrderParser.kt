@@ -141,13 +141,20 @@ object OrderParser {
         // Удаляем дубликаты и пустые
         val finalAddresses = potentialAddresses.distinct()
 
+        // Улучшенная логика: берем первый и ПОСЛЕДНИЙ валидный адрес 
+        // (в Bolt/Uber город часто идет второй строкой, а реальная цель - в самом низу)
         val pickupAddress = cleanAddress(finalAddresses.firstOrNull())
         var destinationAddress: String? = null
+        
         if (finalAddresses.size >= 2) {
-            destinationAddress = cleanAddress(finalAddresses[1])
+            destinationAddress = cleanAddress(finalAddresses.last())
+            
+            // Если вдруг первая и последняя строка совпали (дубль OCR), 
+            // а у нас есть средняя - пробуем взять среднюю
+            if (pickupAddress == destinationAddress && finalAddresses.size > 2) {
+                destinationAddress = cleanAddress(finalAddresses[finalAddresses.size - 2])
+            }
         } else if (finalAddresses.size == 1) {
-            // Если паттерн Bolt: "5 мин 2.7 km АдресА 17 мин 11 km АдресБ"
-            // Попробуем еще раз найти адреса, но уже после цифр km
             destinationAddress = "Unknown"
         }
 
