@@ -17,6 +17,8 @@ if (!GEMINI_KEY) {
 
 // Инициализация Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_KEY || "dummy_key");
+// Принудительно используем стабильную версию API v1 для новых ключей
+const genAI_v1 = new GoogleGenerativeAI(GEMINI_KEY || "dummy_key");
 
 // Диагностика: Список доступных моделей напрямую через REST
 async function listModels() {
@@ -40,16 +42,15 @@ listModels();
 async function analyzeWithVision(base64Image) {
     if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") return null;
 
-    // Используем модели, которые подтверждены диагностикой на вашем ключе
     const modelsToTry = [
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
         "gemini-1.5-flash",
-        "gemini-2.0-flash-001"
+        "gemini-2.0-flash-exp", // Попробуем эксперементальную 2.0 если обычная закрыта
+        "gemini-1.5-flash-8b"
     ];
 
     for (const modelName of modelsToTry) {
         try {
+            // Использование v1 API через SDK
             const model = genAI.getGenerativeModel({ model: modelName });
             const prompt = "Ты - ассистент водителя. Найди адреса на скриншоте. Выведи ТОЛЬКО JSON: { \"pickup\": \"...\", \"destination\": \"...\" }";
 
@@ -58,11 +59,16 @@ async function analyzeWithVision(base64Image) {
                 { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
             ]);
 
-            const text = result.response.text();
-            console.log(`✅ [AI FREE] Успех (${modelName})`);
+            const response = await result.response;
+            const text = response.text();
+            console.log(`✅ [AI SUCCESS] Модель: ${modelName}`);
             return JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
         } catch (e) {
-            console.error(`⚠️ Модель ${modelName} еще не проснулась:`, e.message);
+            console.error(`⚠️ Ошибка ${modelName}:`, e.message);
+            if (e.message.includes("API_KEY_INVALID") || e.message.includes("expired")) {
+                console.error("❌ КРИТИЧЕСКАЯ ОШИБКА: Ваш новый ключ не принят Google. Перепроверьте его в Railway Variables!");
+                return null;
+            }
         }
     }
     return null;
