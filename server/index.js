@@ -24,6 +24,9 @@ const genAI_v1 = new GoogleGenerativeAI(GEMINI_KEY || "dummy_key");
 async function listModels() {
     if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") return;
     try {
+        const lastFour = GEMINI_KEY.slice(-4);
+        console.log(`🔑 Проверка ключа (заканчивается на: ...${lastFour})`);
+
         const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
         const response = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${GEMINI_KEY}`);
         const data = await response.json();
@@ -42,14 +45,16 @@ listModels();
 async function analyzeWithVision(base64Image) {
     if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") return null;
 
+    // Используем ТОЛЬКО те модели, которые твой ключ подтвердил в логах
     const modelsToTry = [
-        "gemini-1.5-flash",
-        "gemini-2.0-flash-exp", // Попробуем эксперементальную 2.0 если обычная закрыта
-        "gemini-1.5-flash-8b"
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.0-flash-001"
     ];
 
     for (const modelName of modelsToTry) {
         try {
+            console.log(`🤖 Пробую модель: ${modelName}`);
             // Использование v1 API через SDK
             const model = genAI.getGenerativeModel({ model: modelName });
             const prompt = "Ты - ассистент водителя. Найди адреса на скриншоте. Выведи ТОЛЬКО JSON: { \"pickup\": \"...\", \"destination\": \"...\" }";
@@ -61,11 +66,6 @@ async function analyzeWithVision(base64Image) {
 
             const response = await result.response;
             const text = response.text();
-
-            if (!text || text.trim().length < 2) {
-                console.warn(`⚠️ [AI EMPTY] Модель ${modelName} вернула пустой ответ.`);
-                continue;
-            }
 
             console.log(`✅ [AI SUCCESS] Модель: ${modelName}, Ответ: ${text}`);
 
