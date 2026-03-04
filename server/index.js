@@ -264,6 +264,15 @@ async function smartAutoCorrect(order, screenshotBase64) {
             dest = aiResult.destination;
             isAutoVerified = true;
             console.log(`🤖 ИИ исправил адрес на: ${dest}`);
+
+            // АВТО-ОБУЧЕНИЕ: Если ИИ уверен, сразу учим эти слова!
+            const allText = `${pickup} ${dest}`;
+            const words = allText.split(/[\s,.-]+/).filter(w => w.length > 3);
+            for (const w of words) {
+                const kw = w.toLowerCase();
+                // Используем пул напрямую, так как мы внутри async функции
+                await pool.query("INSERT INTO intel (keyword, type) VALUES ($1, 'whitelist') ON CONFLICT DO NOTHING", [kw]);
+            }
         }
     }
 
@@ -346,9 +355,10 @@ app.post('/api/admin/orders/:id/correct', async (req, res) => {
         [pickup, destination, id]
     );
 
-    // ОБУЧЕНИЕ: вытаскиваем слова только если это не просто "тихий" апдейт
-    if (destination && isVerified !== false) {
-        const words = destination.split(/[\s,.-]+/).filter(w => w.length > 3);
+    // ОБУЧЕНИЕ: вытаскиваем слова из ОБОИХ адресов (A и B)
+    if (isVerified !== false) {
+        const allText = `${pickup || ""} ${destination || ""}`;
+        const words = allText.split(/[\s,.-]+/).filter(w => w.length > 3);
         for (const w of words) {
             const kw = w.toLowerCase();
             await pool.query("INSERT INTO intel (keyword, type) VALUES ($1, 'whitelist') ON CONFLICT DO NOTHING", [kw]);
