@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -10,8 +11,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_KEY = process.env.GEMINI_KEY;
 
+if (!GEMINI_KEY) {
+    console.error("❌ GEMINI_KEY is not defined in .env file!");
+}
+
 // Инициализация Gemini
-const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+const genAI = new GoogleGenerativeAI(GEMINI_KEY || "dummy_key");
 const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 async function analyzeWithVision(base64Image) {
