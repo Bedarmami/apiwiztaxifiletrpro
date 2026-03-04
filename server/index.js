@@ -17,35 +17,41 @@ if (!GEMINI_KEY) {
 
 // Инициализация Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_KEY || "dummy_key");
-const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Пробуем базовую модель
 
-// Улучшенный лог для дебага
 async function analyzeWithVision(base64Image) {
-    if (!GEMINI_KEY) {
-        console.warn("⚠️ Gemini AI пропущено: Нет ключа в .env");
+    if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") {
+        console.warn("⚠️ Gemini AI пропущено: Ключ GEMINI_KEY не найден в переменных окружения (Variables)");
         return null;
     }
 
-    try {
-        console.log("🤖 Отправка скриншота в Gemini Vision...");
-        const prompt = "Ты - ассистент водителя такси. Посмотри на скриншот заказа и выведи ТОЛЬКО JSON: { \"pickup\": \"адрес подачи\", \"destination\": \"адрес назначения\" }. Если адрес не виден, пиши null. Игнорируй надписи 'Отказ не повлияет' и т.д.";
+    // Список моделей для попытки (иногда v1 требует конкретную версию)
+    const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-latest"];
 
-        const result = await visionModel.generateContent([
-            prompt,
-            { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
-        ]);
+    for (const modelName of modelsToTry) {
+        try {
+            console.log(`🤖 Попытка анализа через модель: ${modelName}...`);
+            const model = genAI.getGenerativeModel({ model: modelName });
 
-        const text = result.response.text();
-        console.log("📝 Ответ Gemini:", text);
-        return JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
-    } catch (e) {
-        if (e.status === 404) {
-            console.error("❌ Ошибка 404: Модель gemini-1.5-flash не найдена. Возможно, регион или ключ не поддерживает эту модель.");
-        } else {
-            console.error("Gemini Vision Error:", e.message);
+            const prompt = "Ты - ассистент водителя такси. Посмотри на скриншот заказа и выведи ТОЛЬКО JSON: { \"pickup\": \"адрес подачи\", \"destination\": \"адрес назначения\" }. Если адрес не виден, пиши null. Игнорируй надписи 'Отказ не повлияет' и т.д.";
+
+            const result = await model.generateContent([
+                prompt,
+                { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
+            ]);
+
+            const text = result.response.text();
+            console.log(`✅ Ответ от ${modelName}:`, text);
+            return JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
+
+        } catch (e) {
+            console.error(`❌ Ошибка модели ${modelName}:`, e.message);
+            if (modelName === modelsToTry[modelsToTry.length - 1]) {
+                console.error("⛔ Все модели Gemini вернули ошибку. Проверь регион аккаунта или настройки API ключа.");
+            }
+            // Пробуем следующую модель в цикле
         }
-        return null;
     }
+    return null;
 }
 
 // ПОДКЛЮЧЕНИЕ К БАЗЕ ДАННЫХ (Railway сама подставит DATABASE_URL)
