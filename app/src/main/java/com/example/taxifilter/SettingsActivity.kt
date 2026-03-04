@@ -213,6 +213,41 @@ fun SettingsScreen(modifier: Modifier = Modifier, onPickScanAreaImage: () -> Uni
         
         // --- НАСТРОЙКИ СТРАТЕГИИ ---
         var currentStrategy by remember { mutableStateOf(prefs.getInt("current_strategy", 2)) }
+        
+        // --- СТАТИСТИКА БАЗЫ ЗНАНИЙ (ИНТЕЛЛЕКТ) ---
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Settings, contentDescription = null, tint = Color(0xFF00BFFF))
+                    Spacer(Modifier.width(8.dp))
+                    Text("База знаний (Интеллект)", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White)
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                        Text("Белые", color = Color.Gray, fontSize = 10.sp)
+                        Text("${SmartLearningManager.getWhitelistCount()}", color = Color(0xFF00FF7F), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                        Text("Черные", color = Color.Gray, fontSize = 10.sp)
+                        Text("${SmartLearningManager.getBlacklistCount()}", color = Color(0xFFFF4B2B), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                        Text("Мусор", color = Color.Gray, fontSize = 10.sp)
+                        Text("${SmartLearningManager.getGarbageCount()}", color = Color.LightGray, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Text(
+                    "Эти слова помогают фильтру одобрять заказы автоматически и отсеивать системный мусор.",
+                    color = Color.DarkGray, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
+
         Card(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),

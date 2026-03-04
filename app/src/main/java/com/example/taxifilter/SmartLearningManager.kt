@@ -16,6 +16,10 @@ object SmartLearningManager {
     private val whiteList = mutableSetOf<String>()
     private val garbageList = mutableSetOf<String>()
     private val ignoreCounter = mutableMapOf<String, Int>()
+    
+    fun getWhitelistCount(): Int = whiteList.size
+    fun getBlacklistCount(): Int = blackList.size
+    fun getGarbageCount(): Int = garbageList.size
 
     fun importCloudData(newWhite: List<String>, newBlack: List<String>, newGarbage: List<String> = emptyList()) {
         newWhite.forEach { learnFromSuccess(it) }
