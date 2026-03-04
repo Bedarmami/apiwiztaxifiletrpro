@@ -38,7 +38,11 @@ async function loadOrders() {
     const data = await res.json();
 
     const unverifiedCount = data.filter(o => !o.is_verified).length;
-    document.getElementById('stats-unverified').innerText = unverifiedCount;
+    const badge = document.getElementById('stats-unverified');
+    if (badge) {
+        badge.innerText = unverifiedCount;
+        badge.style.display = unverifiedCount > 0 ? 'inline-block' : 'none';
+    }
 
     document.getElementById('orders-list').innerHTML = data.map(o => `
         <tr id="order-${o.id}" class="${o.is_verified ? 'verified-row' : 'unverified-row'}">
