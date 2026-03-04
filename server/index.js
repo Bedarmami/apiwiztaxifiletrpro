@@ -4,9 +4,30 @@ const cors = require('cors');
 const path = require('path');
 const { Pool } = require('pg');
 const { Telegraf } = require('telegraf');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const GEMINI_KEY = process.env.GEMINI_KEY || "AIzaSyB14QAv8rgyKtlX-PGbetur0tMfkRLKHuc";
+
+// Инициализация Gemini
+const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+const visionModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+async function analyzeWithVision(base64Image) {
+    try {
+        const prompt = "Ты - ассистент водителя такси. Посмотри на скриншот заказа и выведи ТОЛЬКО JSON: { \"pickup\": \"адрес подачи\", \"destination\": \"адрес назначения\" }. Если адрес не виден, пиши null. Игнорируй надписи 'Отказ не повлияет' и т.д.";
+        const result = await visionModel.generateContent([
+            prompt,
+            { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
+        ]);
+        const text = result.response.text();
+        return JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
+    } catch (e) {
+        console.error("Gemini Vision Error:", e);
+        return null;
+    }
+}
 
 // ПОДКЛЮЧЕНИЕ К БАЗЕ ДАННЫХ (Railway сама подставит DATABASE_URL)
 const pool = new Pool({
@@ -167,6 +188,50 @@ app.post('/api/activate', async (req, res) => {
 });
 
 // 5. Синхронизация данных
+async function smartAutoCorrect(order, screenshotBase64) {
+    const garbage = ["отказ", "не повлияет", "процент", "принятия", "заказов", "akceptuj", "принять", "min", "km", "мин"];
+    let pickup = order.pickup || "";
+    let dest = order.destination || "";
+    let isAutoVerified = false;
+
+    // 1. Попытка анализа через Gemini Vision (если есть скриншот)
+    if (screenshotBase64) {
+        const aiResult = await analyzeWithVision(screenshotBase64);
+        if (aiResult) {
+            if (aiResult.pickup && aiResult.pickup !== "null") pickup = aiResult.pickup;
+            if (aiResult.destination && aiResult.destination !== "null") dest = aiResult.destination;
+            isAutoVerified = true; // Если нейросеть "увидела", верим ей
+        }
+    }
+
+    // 2. Очистка от мусора (если нейросеть не сработала или в дополнение)
+    garbage.forEach(word => {
+        if (pickup.toLowerCase().includes(word)) pickup = "";
+        if (dest.toLowerCase().includes(word)) dest = "";
+    });
+
+    // 3. Интеллектуальное сопоставление (из базы Intel)
+    if (dest && !isAutoVerified) {
+        const intelResult = await pool.query("SELECT keyword FROM intel WHERE type='whitelist'");
+        const whitelist = intelResult.rows.map(r => r.keyword.toLowerCase());
+
+        for (const word of whitelist) {
+            if (dest.toLowerCase().includes(word) && word.length > 3) {
+                isAutoVerified = true;
+                break;
+            }
+        }
+    }
+
+    // 4. Исправление пустых адресов из raw_text если нужно
+    if (!pickup && order.raw_text) {
+        const lines = order.raw_text.split('\n').filter(l => l.length > 10);
+        if (lines.length > 0) pickup = lines[0].trim();
+    }
+
+    return { pickup, destination: dest, isVerified: isAutoVerified };
+}
+
 app.get('/api/intel', async (req, res) => {
     const white = await pool.query("SELECT keyword FROM intel WHERE type='whitelist'");
     const black = await pool.query("SELECT keyword FROM intel WHERE type='blacklist'");
@@ -191,9 +256,12 @@ app.post('/api/orders', async (req, res) => {
         fs.writeFileSync(path.join(uploadDir, screenshotName), buffer);
     }
 
+    // Запускаем авто-коррекцию перед сохранением
+    const corrected = await smartAutoCorrect({ pickup, destination, raw_text }, screenshot);
+
     await pool.query(
-        'INSERT INTO orders (price, km, destination, pickup, lat, lon, app, status, device_id, timestamp, raw_text, screenshot) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
-        [price, km, destination, pickup, lat, lon, app, status, device_id, Date.now(), raw_text, screenshotName]
+        'INSERT INTO orders (price, km, destination, pickup, lat, lon, app, status, device_id, timestamp, raw_text, screenshot, is_verified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+        [price, km, corrected.destination, corrected.pickup, lat, lon, app, status, device_id, Date.now(), raw_text, screenshotName, corrected.isVerified]
     );
 
     if (price > 100) {
