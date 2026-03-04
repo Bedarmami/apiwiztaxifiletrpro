@@ -341,26 +341,32 @@ app.post('/api/orders', async (req, res) => {
     res.json({ status: "saved", screenshot: screenshotName });
 });
 
-// Коррекция заказа из админки (Обучение)
+// Коррекция и одобрение заказа (с обучением)
 app.post('/api/admin/orders/:id/correct', async (req, res) => {
     const { id } = req.params;
-    const { pickup, destination } = req.body;
+    const { pickup, destination, isVerified } = req.body;
 
     await pool.query(
         'UPDATE orders SET pickup = $1, destination = $2, is_verified = TRUE WHERE id = $3',
         [pickup, destination, id]
     );
 
-    // Авто-обучение: вытаскиваем ВСЕ слова длиннее 3 символов
-    if (destination) {
+    // ОБУЧЕНИЕ: вытаскиваем слова только если это не просто "тихий" апдейт
+    if (destination && isVerified !== false) {
         const words = destination.split(/[\s,.-]+/).filter(w => w.length > 3);
         for (const w of words) {
             const kw = w.toLowerCase();
             await pool.query("INSERT INTO intel (keyword, type) VALUES ($1, 'whitelist') ON CONFLICT DO NOTHING", [kw]);
         }
     }
-
     res.json({ status: "corrected" });
+});
+
+// Отказ от обучения (просто ставим галочку, чтобы убрать из очереди, но не учим)
+app.post('/api/admin/orders/:id/reject', async (req, res) => {
+    const { id } = req.params;
+    await pool.query('UPDATE orders SET is_verified = TRUE WHERE id = $1', [id]);
+    res.json({ status: "rejected" });
 });
 
 app.get('/api/stats', async (req, res) => {

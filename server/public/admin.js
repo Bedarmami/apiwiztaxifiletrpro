@@ -65,11 +65,14 @@ async function loadOrders() {
                     <span style="color: #ff4b2b; font-weight: bold;">B:</span> ${o.destination}
                 </div>
                 ${!o.is_verified ? `
-                    <div style="margin-top: 10px; background: rgba(0,255,127,0.1); padding: 5px; border-radius: 4px; border: 1px solid rgba(0,255,127,0.2);">
-                        <span style="font-size: 0.6rem; color: #00ff7f; display: block; margin-bottom: 3px;">ИИ исправил, подтвердите:</span>
-                        <button onclick="verifyOrder(${o.id})" style="width: 100%; background: #00ff7f; color: #000; border: none; padding: 5px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.7rem;">В БАЗУ ✅</button>
+                    <div style="margin-top: 10px; background: rgba(0,255,127,0.05); padding: 8px; border-radius: 6px; border: 1px solid rgba(0,255,127,0.15);">
+                        <span style="font-size: 0.6rem; color: #00ff7f; display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;">ИИ исправил:</span>
+                        <div style="display: flex; gap: 5px;">
+                            <button onclick="verifyOrder(${o.id})" style="flex: 2; background: #00ff7f; color: #000; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.7rem; box-shadow: 0 0 10px rgba(0,255,127,0.2);">В БАЗУ ✅</button>
+                            <button onclick="rejectOrder(${o.id})" style="flex: 1; background: rgba(255,75,43,0.15); color: #ff4b2b; border: 1px solid #ff4b2b; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.6rem;">ОТКАЗ ✖</button>
+                        </div>
                     </div>
-                ` : '<div style="margin-top: 5px; color: #00ff7f; font-size: 0.6rem; font-weight: bold;">ОДОБРЕНО И В БАЗЕ</div>'}
+                ` : '<div style="margin-top: 5px; color: #00ff7f; font-size: 0.6rem; font-weight: bold; opacity: 0.8;">✓ ПРОВЕРЕНО И ОБУЧЕНО</div>'}
             </td>
             <td>
                 <span class="status-badge" style="background: ${o.app === 'BOLT' ? '#00cd00' : '#222'}; color: white; padding: 2px 5px; border-radius: 4px; font-size: 0.7rem;">${o.app || '???'}</span>
@@ -164,14 +167,14 @@ async function editOrder(id, type, currentVal) {
     const newVal = prompt(`Исправить адрес ${type}:`, currentVal === 'null' ? '' : currentVal);
     if (newVal !== null) {
         const row = document.getElementById(`order-${id}`);
-        // Очищаем префиксы и обрабатываем заглушки '---'
         const getVal = (selector, prefix) => {
-            let val = row.querySelector(selector).innerText.replace(prefix, '').trim();
+            let el = row.querySelector(selector);
+            let val = el ? el.innerText.replace(prefix, '').trim() : '';
             return (val === '---' || val === '') ? null : val;
         };
 
-        const pickup = type === 'pickup' ? newVal : getVal('[onclick*="pickup"]', 'A: ');
-        const dest = type === 'destination' ? newVal : getVal('[onclick*="destination"]', 'B: ');
+        const pickup = type === 'pickup' ? newVal : getVal('div[onclick*="pickup"]', 'A:');
+        const dest = type === 'destination' ? newVal : getVal('div[onclick*="destination"]', 'B:');
 
         await fetch(`/api/admin/orders/${id}/correct`, {
             method: 'POST',
@@ -182,15 +185,21 @@ async function editOrder(id, type, currentVal) {
     }
 }
 
+async function rejectOrder(id) {
+    await fetch(`/api/admin/orders/${id}/reject`, { method: 'POST' });
+    updateData();
+}
+
 async function verifyOrder(id) {
     const row = document.getElementById(`order-${id}`);
     const getVal = (selector, prefix) => {
-        let val = row.querySelector(selector).innerText.replace(prefix, '').trim();
+        let el = row.querySelector(selector);
+        let val = el ? el.innerText.replace(prefix, '').trim() : '';
         return (val === '---' || val === '') ? null : val;
     };
 
-    const pickup = getVal('[onclick*="pickup"]', 'A: ');
-    const dest = getVal('[onclick*="destination"]', 'B: ');
+    const pickup = getVal('div[onclick*="pickup"]', 'A:');
+    const dest = getVal('div[onclick*="destination"]', 'B:');
 
     await fetch(`/api/admin/orders/${id}/correct`, {
         method: 'POST',
