@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Taxi Filter Pro</string>
+
+    <!-- Добавьте эти строки -->
+    <string name="app_title">👑 Taxi Filter Pro</string>    <string name="btn_enable_accessibility">Включить фильтр заказов</string>
+    <string name="btn_settings">Настройки фильтра</string>
+    <string name="instructions">После включения:\n1. Откроются настройки Android\n2. Найдите \'Taxi Filter Service\'\n3. Включите переключатель\n4. Приложение будет анализировать уведомления от Uber/Такси</string>
+    <string name="accessibility_service_description">Фильтрует заказы такси</string>
+</resources>

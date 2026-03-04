@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taxi Filter | Admin Panel</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        .admin-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .admin-table th,
+        .admin-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0, 255, 127, 0.1);
+        }
+
+        .admin-table th {
+            background: rgba(0, 255, 127, 0.1);
+            color: var(--neon-green);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.8rem;
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+
+        .status-unused {
+            background: rgba(0, 255, 127, 0.2);
+            color: #00ff7f;
+        }
+
+        .status-used {
+            background: rgba(255, 0, 0, 0.2);
+            color: #ff4444;
+        }
+
+        .tab-btn {
+            background: none;
+            border: 1px solid var(--neon-green);
+            color: var(--neon-green);
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: 'Orbitron';
+            margin-right: 10px;
+            transition: 0.3s;
+        }
+
+        .tab-btn.active {
+            background: var(--neon-green);
+            color: black;
+        }
+    </style>
+</head>
+
+<body class="cyber-bg">
+    <div class="overlay"></div>
+
+    <div class="container">
+        <header>
+            <h1 class="glitch" data-text="ADMIN PANEL">ADMIN PANEL</h1>
+            <div class="status-bar">
+                <div class="status-item">SYSTEM: <span id="server-status" style="color: #00ff7f;">SECURE</span></div>
+                <div class="status-item">DATABASE: <span style="color: #00ff7f;">CONNECTED</span></div>
+            </div>
+        </header>
+
+        <div class="nav-tabs" style="margin-bottom: 20px;">
+            <button class="tab-btn active" onclick="showTab('keys')">КЛЮЧИ</button>
+            <button class="tab-btn" onclick="showTab('orders')">ЗАКАЗЫ</button>
+            <button class="tab-btn" onclick="showTab('drivers')">ВОДИТЕЛИ</button>
+            <button class="tab-btn" onclick="showTab('intel')">ИНТЕЛЛЕКТ</button>
+            <button class="tab-btn" onclick="showTab('settings')">НАСТРОЙКИ</button>
+            <a href="index.html" class="tab-btn"
+                style="text-decoration: none; border-color: var(--neon-blue); color: var(--neon-blue);">НА КАРТУ</a>
+        </div>
+
+        <!-- Секция Ключей -->
+        <section id="keys-section" class="stats-panel card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h2>АКТИВАЦИОННЫЕ КЛЮЧИ</h2>
+                <button onclick="generateKey()" class="tab-btn" style="border-color: #00ff7f; font-size: 0.7rem;">+
+                    ГЕНЕРИРОВАТЬ</button>
+            </div>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>КЛЮЧ</th>
+                        <th>ДНЕЙ</th>
+                        <th>СТАТУС</th>
+                    </tr>
+                </thead>
+                <tbody id="keys-list">
+                    <!-- Заполняется JS -->
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Секция Настроек -->
+        <section id="settings-section" class="stats-panel card" style="display: none;">
+            <h2>УПРАВЛЕНИЕ СИСТЕМОЙ</h2>
+            <div class="admin-grid" style="margin-top: 20px;">
+                <div class="card" style="padding: 15px; background: rgba(0,0,0,0.2);">
+                    <h3>ВЕРСИЯ И APK</h3>
+                    <input type="text" id="version-input" placeholder="Версия (напр. 1.2.6)"
+                        style="width: 100%; margin: 10px 0; padding: 5px; background: #111; color: #fff; border: 1px solid #444;">
+                    <input type="text" id="apk-input" placeholder="Ссылка на APK"
+                        style="width: 100%; margin: 10px 0; padding: 5px; background: #111; color: #fff; border: 1px solid #444;">
+                    <button onclick="saveSettings()" class="tab-btn"
+                        style="width: 100%; margin-top: 10px;">СОХРАНИТЬ</button>
+                </div>
+                <div class="card" style="padding: 15px; background: rgba(0,0,0,0.2);">
+                    <h3>РУЧНОЕ ПРОДЛЕНИЕ</h3>
+                    <input type="text" id="adj-device-id" placeholder="Device ID"
+                        style="width: 100%; margin: 10px 0; padding: 5px; background: #111; color: #fff; border: 1px solid #444;">
+                    <input type="number" id="adj-days" placeholder="Кол-во дней (напр. 30)"
+                        style="width: 100%; margin: 10px 0; padding: 5px; background: #111; color: #fff; border: 1px solid #444;">
+                    <button onclick="adjustTime()" class="tab-btn"
+                        style="width: 100%; margin-top: 10px; border-color: #00d2ff; color: #00d2ff;">ДОБАВИТЬ
+                        ВРЕМЯ</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Секция Заказов -->
+        <section id="orders-section" class="stats-panel card" style="display: none;">
+            <h2>ИСТОРИЯ ЗАКАЗОВ (TOP)</h2>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>ЦЕНА</th>
+                        <th>КМ</th>
+                        <th>МАРШРУТ (A/B)</th>
+                        <th>APP</th>
+                        <th>GPS</th>
+                        <th>STATUS</th>
+                    </tr>
+                </thead>
+                <tbody id="orders-list">
+                    <!-- Заполняется JS -->
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Секция Интеллекта -->
+        <section id="intel-section" class="stats-panel card" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h2>БАЗА ЗНАНИЙ (ОБУЧЕННЫЕ МЕСТА)</h2>
+                <button onclick="updateData()" class="tab-btn"
+                    style="border-color: #00ff7f; font-size: 0.7rem;">ОБНОВИТЬ</button>
+            </div>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>КЛЮЧЕВОЕ СЛОВО</th>
+                        <th>ТИП</th>
+                        <th>ДЕЙСТВИЕ</th>
+                    </tr>
+                </thead>
+                <tbody id="intel-list">
+                    <!-- Заполняется JS -->
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Секция Водителей -->
+        <section id="drivers-section" class="stats-panel card" style="display: none;">
+            <h2>АКТИВНЫЕ УСТРОЙСТВА</h2>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>ID УСТРОЙСТВА</th>
+                        <th>ИМЯ</th>
+                        <th>ПОСЛЕДНЯЯ АКТИВНОСТЬ</th>
+                    </tr>
+                </thead>
+                <tbody id="drivers-list">
+                    <!-- Заполняется JS -->
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+
+</html>
