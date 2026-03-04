@@ -38,26 +38,15 @@ async function listModels() {
 listModels();
 
 async function analyzeWithVision(base64Image) {
-    if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") {
-        console.warn("⚠️ Gemini AI пропущено: Ключ GEMINI_KEY не найден в переменных окружения (Variables)");
-        return null;
-    }
+    if (!GEMINI_KEY || GEMINI_KEY === "dummy_key") return null;
 
-    // Расширенный список моделей для обхода региональных ограничений
-    const modelsToTry = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-flash-8b",
-        "gemini-1.5-pro",
-        "gemini-pro-vision" // старая версия, если новые не пускают
-    ];
+    // ЭКОНОМ-РЕЖИМ: Используем только Flash (бесплатно + быстро)
+    const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash-8b"];
 
     for (const modelName of modelsToTry) {
         try {
-            console.log(`🤖 Попытка анализа через модель: ${modelName}...`);
             const model = genAI.getGenerativeModel({ model: modelName });
-
-            const prompt = "Ты - ассистент водителя такси. Посмотри на скриншот заказа и выведи ТОЛЬКО JSON: { \"pickup\": \"адрес подачи\", \"destination\": \"адрес назначения\" }. Если адрес не виден, пиши null. Игнорируй надписи 'Отказ не повлияет' и т.д.";
+            const prompt = "Ты - ассистент водителя. Найди адреса на скриншоте. Выведи ТОЛЬКО JSON: { \"pickup\": \"...\", \"destination\": \"...\" }";
 
             const result = await model.generateContent([
                 prompt,
@@ -65,15 +54,10 @@ async function analyzeWithVision(base64Image) {
             ]);
 
             const text = result.response.text();
-            console.log(`✅ Ответ от ${modelName}:`, text);
+            console.log(`✅ [AI FREE] Успех (${modelName})`);
             return JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
-
         } catch (e) {
-            console.error(`❌ Ошибка модели ${modelName}:`, e.message);
-            if (modelName === modelsToTry[modelsToTry.length - 1]) {
-                console.error("⛔ Все модели Gemini вернули ошибку. Проверь регион аккаунта или настройки API ключа.");
-            }
-            // Пробуем следующую модель в цикле
+            console.error(`⚠️ Модель ${modelName} еще не проснулась:`, e.message);
         }
     }
     return null;
