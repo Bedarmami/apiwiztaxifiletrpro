@@ -135,7 +135,7 @@ object OrderParser {
                            lower.contains("закрыть") || lower.contains("все") || 
                            lower.contains("отказ") || lower.contains("akceptuj") || lower.contains("принять")
             
-            (!isGarbage && line.length in 5..100)
+            (!isGarbage && !SmartLearningManager.isLikelyGarbage(line) && line.length in 5..100)
         }
         
         // Удаляем дубликаты и пустые

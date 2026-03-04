@@ -102,8 +102,8 @@ object DriverNetworkManager {
                 if (response.isSuccessful) {
                     val intel = response.body()
                     if (intel != null) {
-                        SmartLearningManager.importCloudData(intel.whitelist, intel.blacklist)
-                        Log.d("Network", "Облачная база знаний синхронизирована: W=${intel.whitelist.size}, B=${intel.blacklist.size}")
+                        SmartLearningManager.importCloudData(intel.whitelist, intel.blacklist, intel.garbage)
+                        Log.d("Network", "Облачная база знаний синхронизирована: W=${intel.whitelist.size}, B=${intel.blacklist.size}, G=${intel.garbage.size}")
                     }
                 }
             } catch (e: Exception) {

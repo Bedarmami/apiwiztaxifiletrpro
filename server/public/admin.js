@@ -99,13 +99,19 @@ async function loadDrivers() {
 async function loadIntel() {
     const res = await fetch('/api/admin/intel-all');
     const data = await res.json();
-    document.getElementById('intel-list').innerHTML = data.map(i => `
-        <tr>
-            <td style="color: #00d2ff;">${i.keyword}</td>
-            <td>${i.type}</td>
-            <td><button onclick="deleteIntel('${i.keyword}')" style="background:none; border: 1px solid red; color: red; cursor:pointer; font-size: 0.6rem; padding: 2px 5px;">УДАЛИТЬ</button></td>
-        </tr>
-    `).join('');
+    document.getElementById('intel-list').innerHTML = data.map(i => {
+        let color = "#00ff7f"; // whitelist
+        if (i.type === 'blacklist') color = "#ff4b2b";
+        if (i.type === 'garbage') color = "#aaaaaa";
+
+        return `
+            <tr>
+                <td style="color: #00d2ff;">${i.keyword}</td>
+                <td><span style="color: ${color}; font-size: 0.7rem; font-weight: bold;">${i.type.toUpperCase()}</span></td>
+                <td><button onclick="deleteIntel('${i.keyword}')" style="background:none; border: 1px solid rgba(255,255,255,0.2); color: #888; cursor:pointer; font-size: 0.6rem; padding: 2px 5px; border-radius: 3px;">УДАЛИТЬ</button></td>
+            </tr>
+        `;
+    }).join('');
 }
 
 async function deleteIntel(keyword) {

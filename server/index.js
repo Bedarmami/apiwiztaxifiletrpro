@@ -59,7 +59,7 @@ async function analyzeWithVision(base64Image) {
             const model = genAI.getGenerativeModel({ model: modelName });
 
             // Упрощаем промпт для лучшей совместимости
-            const prompt = "Определи адрес подачи и адрес назначения на фото. Ответ в JSON: { \"pickup\": \"\", \"destination\": \"\" }";
+            const prompt = "Определи адрес подачи и адрес назначения на фото. Также найди названия приложений (Telegram, Spotify и т.д.) или элементов интерфейса, которые НЕ относятся к адресу. Ответ СТРОГО в JSON: { \"pickup\": \"\", \"destination\": \"\", \"junk\": [\"слово1\", \"слово2\"] }";
 
             const result = await model.generateContent([
                 { text: prompt },
@@ -273,8 +273,17 @@ async function smartAutoCorrect(order, screenshotBase64) {
             const words = allText.split(/[\s,.-]+/).filter(w => w.length > 3);
             for (const w of words) {
                 const kw = w.toLowerCase();
-                // Используем пул напрямую, так как мы внутри async функции
-                await pool.query("INSERT INTO intel (keyword, type) VALUES ($1, 'whitelist') ON CONFLICT DO NOTHING", [kw]);
+                await pool.query("INSERT INTO intel (keyword, type) VALUES ($1, 'whitelist') ON CONFLICT (keyword) DO UPDATE SET type = 'whitelist'", [kw]);
+            }
+
+            // АВТО-МУСОР: Если ИИ нашел мусор, сразу в базу его!
+            if (aiResult.junk && Array.isArray(aiResult.junk)) {
+                for (const j of aiResult.junk) {
+                    if (j.length > 3) {
+                        const kw = j.toLowerCase();
+                        await pool.query("INSERT INTO intel (keyword, type) VALUES ($1, 'garbage') ON CONFLICT (keyword) DO UPDATE SET type = 'garbage'", [kw]);
+                    }
+                }
             }
         }
     }
@@ -312,13 +321,15 @@ app.get('/api/intel', async (req, res) => {
     try {
         const white = await pool.query("SELECT keyword FROM intel WHERE type = 'whitelist'");
         const black = await pool.query("SELECT keyword FROM intel WHERE type = 'blacklist'");
+        const garbage = await pool.query("SELECT keyword FROM intel WHERE type = 'garbage'");
 
         res.json({
             whitelist: white.rows.map(r => r.keyword),
-            blacklist: black.rows.map(r => r.keyword)
+            blacklist: black.rows.map(r => r.keyword),
+            garbage: garbage.rows.map(r => r.keyword)
         });
     } catch (e) {
-        res.status(500).json({ whitelist: [], blacklist: [] });
+        res.status(500).json({ whitelist: [], blacklist: [], garbage: [] });
     }
 });
 

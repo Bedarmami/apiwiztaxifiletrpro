@@ -39,7 +39,8 @@ data class DriverLocation(
 
 data class IntelResponse(
     val blacklist: List<String>,
-    val whitelist: List<String>
+    val whitelist: List<String>,
+    val garbage: List<String> = emptyList()
 )
 
 data class OrderLogRequest(

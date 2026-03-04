@@ -14,15 +14,19 @@ object SmartLearningManager {
     
     private val blackList = mutableSetOf<String>()
     private val whiteList = mutableSetOf<String>()
+    private val garbageList = mutableSetOf<String>()
     private val ignoreCounter = mutableMapOf<String, Int>()
 
-    fun importCloudData(newWhite: List<String>, newBlack: List<String>) {
+    fun importCloudData(newWhite: List<String>, newBlack: List<String>, newGarbage: List<String> = emptyList()) {
         newWhite.forEach { learnFromSuccess(it) }
         newBlack.forEach { word ->
             val w = word.lowercase()
             if (!whiteList.contains(w)) {
                 blackList.add(w)
             }
+        }
+        newGarbage.forEach { word ->
+            garbageList.add(word.lowercase())
         }
     }
 
@@ -38,6 +42,10 @@ object SmartLearningManager {
                 val wArray = json.optJSONArray("whitelist")
                 wArray?.let {
                     for (i in 0 until it.length()) whiteList.add(it.getString(i))
+                }
+                val gArray = json.optJSONArray("garbage")
+                gArray?.let {
+                    for (i in 0 until it.length()) garbageList.add(it.getString(i))
                 }
             }
         } catch (e: Exception) {
@@ -107,7 +115,7 @@ object SmartLearningManager {
 
     fun isLikelyGarbage(line: String): Boolean {
         val lower = line.lowercase()
-        return blackList.any { lower.contains(it) }
+        return blackList.any { lower.contains(it) } || garbageList.any { lower.contains(it) }
     }
 
     fun save(context: Context) {
@@ -115,6 +123,7 @@ object SmartLearningManager {
             val json = JSONObject()
             json.put("blacklist", JSONArray(blackList.toList()))
             json.put("whitelist", JSONArray(whiteList.toList()))
+            json.put("garbage", JSONArray(garbageList.toList()))
             val file = File(context.filesDir, FILE_NAME)
             file.writeText(json.toString())
         } catch (e: Exception) {
