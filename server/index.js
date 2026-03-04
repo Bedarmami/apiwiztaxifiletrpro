@@ -61,8 +61,23 @@ async function analyzeWithVision(base64Image) {
 
             const response = await result.response;
             const text = response.text();
-            console.log(`✅ [AI SUCCESS] Модель: ${modelName}`);
-            return JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
+
+            if (!text || text.trim().length < 2) {
+                console.warn(`⚠️ [AI EMPTY] Модель ${modelName} вернула пустой ответ.`);
+                continue;
+            }
+
+            console.log(`✅ [AI SUCCESS] Модель: ${modelName}, Ответ: ${text}`);
+
+            // Пытаемся вытащить JSON из текста
+            const jsonStart = text.indexOf('{');
+            const jsonEnd = text.lastIndexOf('}');
+            if (jsonStart !== -1 && jsonEnd !== -1) {
+                const jsonStr = text.substring(jsonStart, jsonEnd + 1);
+                return JSON.parse(jsonStr);
+            }
+
+            return null;
         } catch (e) {
             console.error(`⚠️ Ошибка ${modelName}:`, e.message);
             if (e.message.includes("API_KEY_INVALID") || e.message.includes("expired")) {
