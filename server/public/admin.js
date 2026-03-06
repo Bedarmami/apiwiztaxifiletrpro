@@ -5,7 +5,11 @@ function showTab(tabId) {
     document.getElementById(tabId + '-section').style.display = 'block';
     if (event) event.currentTarget.classList.add('active');
 
-    updateData();
+    if (tabId === 'reports') {
+        if (typeof loadReports === 'function') loadReports();
+    } else {
+        updateData();
+    }
 }
 
 async function updateData() {
