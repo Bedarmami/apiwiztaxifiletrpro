@@ -16,10 +16,24 @@ object SmartLearningManager {
     private val whiteList = mutableSetOf<String>()
     private val garbageList = mutableSetOf<String>()
     private val ignoreCounter = mutableMapOf<String, Int>()
+    private val cityMap = mutableMapOf<String, String>() // OCR Raw -> Verified City
     
     fun getWhitelistCount(): Int = whiteList.size
     fun getBlacklistCount(): Int = blackList.size
     fun getGarbageCount(): Int = garbageList.size
+    fun getCityMappingCount(): Int = cityMap.size
+
+    fun verifyCity(rawCity: String): String? {
+        val low = rawCity.lowercase().trim()
+        if (low.length < 3) return null
+        return cityMap[low] ?: cityMap.entries.find { low.contains(it.key) }?.value
+    }
+
+    fun addCityMapping(raw: String, verified: String) {
+        if (raw.length in 3..50 && verified.isNotEmpty()) {
+            cityMap[raw.lowercase().trim()] = verified
+        }
+    }
 
     fun importCloudData(newWhite: List<String>, newBlack: List<String>, newGarbage: List<String> = emptyList()) {
         newWhite.forEach { learnFromSuccess(it) }
@@ -50,6 +64,15 @@ object SmartLearningManager {
                 val gArray = json.optJSONArray("garbage")
                 gArray?.let {
                     for (i in 0 until it.length()) garbageList.add(it.getString(i))
+                }
+                
+                val cMap = json.optJSONObject("city_map")
+                cMap?.let { obj ->
+                    val keys = obj.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        cityMap[key] = obj.getString(key)
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -97,7 +120,7 @@ object SmartLearningManager {
      * Возвращает "Оценку уверенности" в адресе
      */
     fun getConfidence(address: String?): Int {
-        if (address == null || address.length < 5) return 0
+        if (address == null || address.length < 5 || address.equals("Unknown", ignoreCase = true)) return 0
         val words = address.lowercase().split(" ", ",", ".", "-").filter { it.length > 2 }
         
         // Базовая уверенность ниже, если слов мало
@@ -114,12 +137,19 @@ object SmartLearningManager {
         val low = word.lowercase()
         return low.contains("miui") || low.contains("android") || low.contains("безопасн") || 
                low.contains("доступ") || low.contains("система") || low.contains("huawei") ||
-               low.contains("samsung") || low.contains("xiaomi") || low.contains("charge")
+               low.contains("samsung") || low.contains("xiaomi") || low.contains("charge") ||
+               low.contains("mock") || low.contains("location") || low.contains("music") || 
+               low.contains("активн") || low.contains("прилож") || low.contains("телефон") ||
+               low.contains("уведомл") || low.contains("настройк") || low.contains("экрана")
     }
 
     fun isLikelyGarbage(line: String): Boolean {
         val lower = line.lowercase()
-        return blackList.any { lower.contains(it) } || garbageList.any { lower.contains(it) }
+        val words = lower.split(" ", ",", ".", "(", ")", "-").filter { it.length > 2 }
+        
+        return blackList.any { lower.contains(it) } || 
+               garbageList.any { lower.contains(it) } ||
+               words.any { isHardcodedGarbage(it) }
     }
 
     fun save(context: Context) {
@@ -128,6 +158,11 @@ object SmartLearningManager {
             json.put("blacklist", JSONArray(blackList.toList()))
             json.put("whitelist", JSONArray(whiteList.toList()))
             json.put("garbage", JSONArray(garbageList.toList()))
+            
+            val cMap = JSONObject()
+            cityMap.forEach { (k, v) -> cMap.put(k, v) }
+            json.put("city_map", cMap)
+            
             val file = File(context.filesDir, FILE_NAME)
             file.writeText(json.toString())
         } catch (e: Exception) {

@@ -24,6 +24,8 @@ import kotlin.math.sin
 import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.atan
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class ScreenCaptureService : Service() {
 
@@ -31,21 +33,41 @@ class ScreenCaptureService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
     private val handler = Handler(Looper.getMainLooper())
-    private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    private val recognizer = TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
     private var wakeLock: PowerManager.WakeLock? = null
     private var overlayController: OverlayController? = null
 
     override fun onCreate() {
         super.onCreate()
+        instance = this  // 🐞 регистрируемся
         SmartLearningManager.init(this)
         StatsManager.init(this)
         overlayController = OverlayController(this)
-        registerReceiver(testReceiver, IntentFilter("com.example.taxifilter.TEST_ORDER"), Context.RECEIVER_NOT_EXPORTED)
+        val filter = IntentFilter("com.example.taxifilter.TEST_ORDER")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(testReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(testReceiver, filter)
+        }
+        // 🐞 Bug report receiver (fallback на broadcast)
+        val bugFilter = IntentFilter("com.example.taxifilter.SAVE_BUG_REPORT")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(bugReportReceiver, bugFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(bugReportReceiver, bugFilter)
+        }
     }
 
     // Overlay Logic Text Processor
     private var overlayLastFingerprint = ""
     private var overlayLastProcessTime = 0L
+
+    // 🐞 Приёмник для сохранения отчёта из overlay-кнопки
+    private val bugReportReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            saveBugReport(false)
+        }
+    }
 
     private val testReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -57,7 +79,10 @@ class ScreenCaptureService : Service() {
             processText(text)
             
             if (force) {
-                val orderInfo = OrderParser.parse(text)
+                val prefs = getSharedPreferences("taxi_prefs", Context.MODE_PRIVATE)
+                val commission = prefs.getFloat("app_commission", 25f)
+                val fuelCost = prefs.getFloat("fuel_cost_per_km", 0.40f)
+                val orderInfo = OrderParser.parse(text, commission, fuelCost)
                 forceAnalyzeOrder(orderInfo)
             }
         }
@@ -75,11 +100,24 @@ class ScreenCaptureService : Service() {
     private var mlPendingOrder: OrderInfo? = null
     private val mlHandler = Handler(Looper.getMainLooper())
     private var mlReportRunnable: Runnable? = null
+    
+    // == Чёрный ящик (по аналогии accesreed) ==
+    private val rollingLog = java.util.LinkedList<String>()
+    private val MAX_LOG_ENTRIES = 50
+    private var lastRawOcrText = ""
+    
+    // 1H PROFIT: Idle & WakeLock management
+    private var lastOrderTime = System.currentTimeMillis()
+    private val WAKELOCK_RENEW_INTERVAL = 3600000L // 1 Hour
+    private var wakeLockTimer: Timer? = null
 
     companion object {
         private const val TAG = "ScreenCapture"
         private const val CHANNEL_ID = "ScreenCaptureChannel"
         private const val NOTIFICATION_ID = 101
+        
+        // 🐞 Статическая ссылка на сервис — OverlayController держит прямой доступ
+        var instance: ScreenCaptureService? = null
     }
 
     private var locationTimer: Timer? = null
@@ -107,13 +145,12 @@ class ScreenCaptureService : Service() {
             setupVirtualDisplay()
             startCaptureLoop()
             startLocationUpdates()
-            
             // Авто-синхронизация базы знаний при старте
             DriverNetworkManager.syncData(this)
             
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TaxiFilter::OCR_WakeLock")
-            wakeLock?.acquire()
+            // 1H Profit logic: start automated renewal instead of manual acquire here
+            startWakeLockRenewal()
+            startIdleTracking()
         }
         
         return START_NOT_STICKY
@@ -143,6 +180,34 @@ class ScreenCaptureService : Service() {
         }
     }
 
+    private fun startWakeLockRenewal() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TaxiFilter::OCR_WakeLock")
+        
+        wakeLockTimer = Timer()
+        wakeLockTimer?.scheduleAtFixedRate(object : TimerTask() {
+            override fun run() {
+                Log.d(TAG, "Renewing WakeLock for 1 hour...")
+                if (wakeLock?.isHeld == true) wakeLock?.release()
+                wakeLock?.acquire(WAKELOCK_RENEW_INTERVAL)
+            }
+        }, 0, WAKELOCK_RENEW_INTERVAL - 60000) // Renew 1 min before expiry
+    }
+
+    private fun startIdleTracking() {
+        handler.postDelayed(object : Runnable {
+            override fun run() {
+                val idleTime = System.currentTimeMillis() - lastOrderTime
+                if (idleTime > 900000) { // 15 mins of silence
+                    Log.d(TAG, "Idle for 15 mins. Playing reminder sound.")
+                    playSoundAndVibrate() // 1H PROFIT: Notification for driver
+                    lastOrderTime = System.currentTimeMillis() // Reset to avoid spam
+                }
+                handler.postDelayed(this, 60000) // Check every minute
+            }
+        }, 60000)
+    }
+
     private fun setupVirtualDisplay() {
         val metrics = resources.displayMetrics
         imageReader = ImageReader.newInstance(metrics.widthPixels, metrics.heightPixels, PixelFormat.RGBA_8888, 2)
@@ -165,6 +230,9 @@ class ScreenCaptureService : Service() {
         }, 1000)
     }
 
+    private var lastLuminance = 0.0
+    private val LUMINANCE_THRESHOLD = 0.001 
+
     private fun captureAndProcess() {
         var lastImage: android.media.Image? = null
         while (true) {
@@ -184,47 +252,68 @@ class ScreenCaptureService : Service() {
             val width = image.width
             val height = image.height
 
-            var bitmap = Bitmap.createBitmap(width + (rowStride - pixelStride * width) / pixelStride, height, Bitmap.Config.ARGB_8888)
+            val prefs = getSharedPreferences("taxi_prefs", Context.MODE_PRIVATE)
+            val topPct = prefs.getFloat("roi_top_pct", 0.35f)
+            val bottomPct = prefs.getFloat("roi_bottom_pct", 0.90f)
+
+            // --- 1H PROFIT OPTIMIZATION: Luminance Variance Check ONLY on ROI ---
+            // We focus detection on the area where the order actually appears.
+            val variance = calculateLuminanceVariance(buffer, width, height, rowStride, topPct, bottomPct)
+            if (kotlin.math.abs(variance - lastLuminance) < LUMINANCE_THRESHOLD) {
+                isProcessing.set(false)
+                image.close()
+                return
+            }
+            lastLuminance = variance
+            Log.d(TAG, "Screen ROI changed, running OCR... (Var: $variance)")
+
+            var bitmap = Bitmap.createBitmap(width + (rowStride - 4 * width) / 4, height, Bitmap.Config.ARGB_8888)
             buffer.position(0)
             bitmap.copyPixelsFromBuffer(buffer)
+            image.close() 
+            lastImage = null // Mark as closed
 
-            val prefs = getSharedPreferences("taxi_prefs", Context.MODE_PRIVATE)
-            if (prefs.getBoolean("scan_area_set", false)) {
-                val x = prefs.getInt("scan_x", 0)
-                val y = prefs.getInt("scan_y", 0)
-                val w = prefs.getInt("scan_w", bitmap.width)
-                val h = prefs.getInt("scan_h", bitmap.height)
+            // --- 1H PROFIT: ROI Cropping Logic (Tuned for better results) ---
+            val cropX = (width * 0.05).toInt() // Wide capture to ensure price is not cut
+            val cropY = (height * 0.33).toInt() // Start above the card
+            val cropWidth = (width * 0.90).toInt()
+            val cropHeight = (height * 0.55).toInt() // Focus on the bottom half where cards appear
 
-                val safeX = x.coerceIn(0, bitmap.width - 1)
-                val safeY = y.coerceIn(0, bitmap.height - 1)
-                val safeW = w.coerceIn(1, bitmap.width - safeX)
-                val safeH = h.coerceIn(1, bitmap.height - safeY)
+            val safeX = cropX.coerceIn(0, bitmap.width - 1)
+            val safeY = cropY.coerceIn(0, bitmap.height - 1)
+            val safeW = cropWidth.coerceIn(1, bitmap.width - safeX)
+            val safeH = cropHeight.coerceIn(1, bitmap.height - safeY)
 
-                val cropped = Bitmap.createBitmap(bitmap, safeX, safeY, safeW, safeH)
-                bitmap.recycle()
-                bitmap = cropped
-            }
+            val cropped = Bitmap.createBitmap(bitmap, safeX, safeY, safeW, safeH)
+            bitmap.recycle()
+            bitmap = cropped
             
             val inputImage = InputImage.fromBitmap(bitmap, 0)
             val currentBitmap = bitmap
             recognizer.process(inputImage)
+                .addOnCompleteListener {
+                    isProcessing.set(false) // Всегда сбрасываем флаг завершения
+                }
                 .addOnSuccessListener { visionText ->
                     val rawText = visionText.text
                     if (rawText.isNotEmpty() && OrderParser.containsTaxiKeywords(rawText)) {
+                        lastOrderTime = System.currentTimeMillis() // Reset idle timer
                         processText(rawText, currentBitmap)
                         
-                        val orderInfo = OrderParser.parse(rawText)
-                        val minRate = prefs.getFloat("min_hourly_rate", 60f)
-                        val costPerKm = prefs.getFloat("cost_per_km", 0.30f)
-                        val loadingTime = prefs.getInt("loading_time", 2)
+                        val commission = prefs.getFloat("app_commission", 25f)
+                        val fuelCost = prefs.getFloat("fuel_cost_per_km", 0.40f)
+                        val orderInfo = OrderParser.parse(rawText, commission, fuelCost)
                         
-                        val totalMinutes = (if (orderInfo.timeToClient > 0) orderInfo.timeToClient else 30) + loadingTime
-                        val runningCost = orderInfo.estimatedDistance * costPerKm
-                        val netEarning = orderInfo.price - runningCost
-                        val hourlyRate = (netEarning / (totalMinutes / 60.0)).toInt()
+                        val minRate = prefs.getFloat("min_hourly_rate", 60f)
+                        
+                        // Use calculated rate from orderInfo
+                        val hourlyRate = orderInfo.hourlyRate.toInt()
                         
                         val fingerprint = "${orderInfo.price}:${orderInfo.timeToClient}:${orderInfo.estimatedDistance}"
                         val isNewOrder = fingerprint != lastOrderFingerprint || (System.currentTimeMillis() - lastSentTime > 60000)
+
+                        // 1H PROFIT: If rate is 15% above min, it's "Highly Profitable"
+                        val isHighlyProfitable = hourlyRate >= (minRate * 1.15f)
 
                         if (hourlyRate >= minRate && orderInfo.price > 1.0 && isNewOrder) {
                             lastOrderFingerprint = fingerprint
@@ -311,23 +400,16 @@ class ScreenCaptureService : Service() {
             Log.e(TAG, "Capture failed", e)
             isProcessing.set(false)
         } finally {
-            image.close()
+            try { lastImage?.close() } catch (e: Exception) {}
         }
     }
 
     private fun forceAnalyzeOrder(orderInfo: OrderInfo) {
         val prefs = getSharedPreferences("taxi_prefs", Context.MODE_PRIVATE)
-        val costPerKm = prefs.getFloat("cost_per_km", 0.30f)
-        val loadingTime = prefs.getInt("loading_time", 2)
         val overlayDuration = prefs.getInt("overlay_duration", 10)
 
-        val totalMinutes = (if (orderInfo.timeToClient > 0) orderInfo.timeToClient else 30) + loadingTime
-        val runningCost = orderInfo.estimatedDistance * costPerKm
-        val netEarning = orderInfo.price - runningCost
-        val hourlyRate = (netEarning / (totalMinutes / 60.0)).toInt()
-
         overlayController?.showOrderInfo(
-            hourlyRate = hourlyRate,
+            hourlyRate = orderInfo.hourlyRate.toInt(),
             km = orderInfo.estimatedDistance,
             minutes = orderInfo.timeToClient,
             pickup = orderInfo.pickupAddress,
@@ -336,18 +418,39 @@ class ScreenCaptureService : Service() {
             appName = orderInfo.appName,
             confidence = orderInfo.confidence,
             surge = orderInfo.surgeMultiplier,
-            rating = orderInfo.passengerRating
+            rating = orderInfo.passengerRating,
+            isHighlyProfitable = orderInfo.isHighlyProfitable
         )
         playSoundAndVibrate()
     }
 
     private fun processText(text: String, bitmap: Bitmap? = null) {
-        val orderInfo = OrderParser.parse(text)
+        val prefs = getSharedPreferences("taxi_prefs", Context.MODE_PRIVATE)
+        val commission = prefs.getFloat("app_commission", 25f)
+        val fuelCost = prefs.getFloat("fuel_cost_per_km", 0.40f)
+        val orderInfo = OrderParser.parse(text, commission, fuelCost)
+        
         val fingerprint = "${orderInfo.price}:${orderInfo.timeToClient}:${orderInfo.estimatedDistance}"
         
-        if (fingerprint == overlayLastFingerprint && System.currentTimeMillis() - overlayLastProcessTime < 60000) return
-        
-        if (orderInfo.price > 1.0 && orderInfo.timeToClient > 0 && orderInfo.estimatedDistance > 0.0) {
+        // Анти-спам для OCR: 2 секунды, чтобы ловить быстрые изменения
+        if (fingerprint == overlayLastFingerprint && System.currentTimeMillis() - overlayLastProcessTime < 2000) return
+        // Исключаем текст нашего собственного оверлея
+        val lower = text.lowercase()
+        // Исключаем текст нашего собственного оверлея максимально жестко
+        // Исключаем текст нашего собственного оверлея максимально жестко
+        if (lower.contains("zł/ч") || lower.contains("zł/ч") || lower.contains("ai:") ||
+            lower.contains("profit:") || lower.contains(" (мин)") || lower.contains(" (min)") ||
+            lower.contains("👤") || lower.contains("sync") || lower.contains("a (") || lower.contains("b (") ||
+            // 🔴 НОВОЕ: фильтр popup нашего приложения ("0.50 zł/ KM" = объяснение расходов)
+            lower.contains("zł/") ||   // "zł/ km", "zł/ км" — только в нашем popup
+            lower.contains("nohatho") || lower.contains("ponятно") ||  // кнопка "ПОНЯТНО"
+            lower.contains("kapмaHe") || lower.contains("karman") ||   // "кармане" из объяснения
+            // Украинский интерфейс приложения
+            lower.contains("3aMoBneHb") || lower.contains("3akoblth") ||
+            lower.contains("вплине на показник") || lower.contains("bnnhhe")) return
+
+        // Показываем плашку даже если парсер не нашел все данные (как в 1 Hour)
+        if (true) { 
             var base64Img: String? = null
             bitmap?.let {
                 try {
@@ -407,6 +510,11 @@ class ScreenCaptureService : Service() {
 
             overlayLastFingerprint = fingerprint
             overlayLastProcessTime = System.currentTimeMillis()
+
+            // Чёрный ящик
+            addToRollingLog(text, orderInfo)
+            lastRawOcrText = text
+
             analyzeOrder(orderInfo)
         }
     }
@@ -416,21 +524,14 @@ class ScreenCaptureService : Service() {
         val minHourlyRate = prefs.getFloat("min_hourly_rate", 60f)
         val maxTime = prefs.getInt("max_time", 40)
         val maxDist = prefs.getFloat("max_distance", 30f)
-        val costPerKm = prefs.getFloat("cost_per_km", 0.30f)
-        val loadingTime = prefs.getInt("loading_time", 2)
         val overlayDuration = prefs.getInt("overlay_duration", 10)
 
-        val totalMinutes = (if (orderInfo.timeToClient > 0) orderInfo.timeToClient else 30) + loadingTime
-        val runningCost = orderInfo.estimatedDistance * costPerKm
-        val netEarning = orderInfo.price - runningCost
-        val hourlyRate = (netEarning / (totalMinutes / 60.0)).toInt()
-
-        val isGood = (hourlyRate >= minHourlyRate &&
+        val isGood = (orderInfo.hourlyRate >= minHourlyRate &&
                       orderInfo.timeToClient <= maxTime &&
                       orderInfo.estimatedDistance <= maxDist) || orderInfo.confidence >= 95
 
         overlayController?.showOrderInfo(
-            hourlyRate = hourlyRate,
+            hourlyRate = orderInfo.hourlyRate.toInt(),
             km = orderInfo.estimatedDistance,
             minutes = orderInfo.timeToClient,
             pickup = orderInfo.pickupAddress,
@@ -439,10 +540,15 @@ class ScreenCaptureService : Service() {
             appName = orderInfo.appName,
             confidence = orderInfo.confidence,
             surge = orderInfo.surgeMultiplier,
-            rating = orderInfo.passengerRating
+            rating = orderInfo.passengerRating,
+            isHighlyProfitable = orderInfo.isHighlyProfitable,
+            pickupTime = orderInfo.pickupTime,
+            destinationTime = orderInfo.destinationTime
         )
         if (isGood) {
             playSoundAndVibrate()
+            // 🔴 Исправлено: ChainPredictor теперь знает пункт назначения
+            ChainPredictor.setLastDestination(orderInfo.destinationAddress)
         }
     }
 
@@ -455,6 +561,123 @@ class ScreenCaptureService : Service() {
             null
         }
     }
+
+    // ==================== DEBUG / BLACK BOX (like accesreed) ====================
+
+    private fun addToRollingLog(rawText: String, order: OrderInfo) {
+        val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date())
+        val entry = buildString {
+            appendLine("[$ts] ЦЕНА: ${order.price} | РАССТ: ${order.estimatedDistance} км | ВРЕМЯ: ${order.timeToClient} мин")
+            appendLine("Адрес А: ${order.pickupAddress ?: "-"}")
+            appendLine("Адрес Б: ${order.destinationAddress ?: "-"}")
+            appendLine("Час_ставка: ${order.hourlyRate.toInt()} zł/ч | App: ${order.appName}")
+            appendLine("Сырой OCR (сжат):\n${compressText(rawText)}")
+            appendLine("-".repeat(50))
+        }
+        if (rollingLog.size >= MAX_LOG_ENTRIES) rollingLog.removeFirst()
+        rollingLog.addLast(entry)
+    }
+
+    private fun compressText(text: String): String {
+        // Аналог accesreed: подсчитываем повторы в OCR тексте
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val counts = LinkedHashMap<String, Int>()
+        for (line in lines) counts[line] = (counts[line] ?: 0) + 1
+        return counts.entries.joinToString("\n") { (line, cnt) ->
+            if (cnt > 1) "$line ×$cnt" else line
+        }
+    }
+
+    fun saveBugReport(isGood: Boolean) {
+        try {
+            val dir = java.io.File(getExternalFilesDir(null), "TaxiFilter_Reports")
+            dir.mkdirs()
+            val ts = java.text.SimpleDateFormat("yyyy_MM_dd_HH_mm_ss", java.util.Locale.getDefault()).format(java.util.Date())
+            val prefix = if (isGood) "good_" else "bad_"
+            val file = java.io.File(dir, "${prefix}report_$ts.txt")
+
+            val sb = StringBuilder()
+            sb.appendLine("=== ОТЧЁТ TAXIFILTER (${if (isGood) "УСПЕХ" else "ОШИБКА"}) ===")
+            sb.appendLine("Время: $ts")
+            sb.appendLine()
+            sb.appendLine("=== ЧЁРНЫЙ ЯЩИК (${rollingLog.size} записей) ===")
+            rollingLog.forEach { sb.append(it) }
+            sb.appendLine()
+            sb.appendLine("=== ПОСЛЕДНИЙ СЫРОЙ OCR ===")
+            sb.appendLine(lastRawOcrText)
+            sb.appendLine()
+            sb.appendLine("=== СЖАТЫЙ OCR ===")
+            sb.appendLine(compressText(lastRawOcrText))
+
+            file.writeText(sb.toString())
+            
+            // 📤 Автоотправка отчёта в Telegram
+            sendReportToTelegram(file, isGood, ts)
+            
+            android.widget.Toast.makeText(this,
+                "🐞 Отчёт сохранён и отправлен в TG",
+                android.widget.Toast.LENGTH_LONG).show()
+            Log.d(TAG, "Отчёт сохранён: ${file.absolutePath}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Ошибка сохранения отчёта", e)
+        }
+    }
+
+    private fun sendReportToTelegram(file: java.io.File, isGood: Boolean, ts: String) {
+        val prefs = getSharedPreferences("taxi_prefs", Context.MODE_PRIVATE)
+        val deviceId = prefs.getString("device_id", android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID)) ?: "unknown"
+        val serverUrl = prefs.getString("server_url", "https://railway-volume-dump-production-ead4.up.railway.app")
+            ?.takeIf { it.isNotEmpty() } ?: "https://railway-volume-dump-production-ead4.up.railway.app"
+        val logText = file.readText()
+
+        Thread {
+            // 1. Отправка в Telegram
+            try {
+                val chatId = TelegramSender.ADMIN_CHAT_ID
+                if (chatId.isNotEmpty()) {
+                    val botToken = "8724275601:AAGoPoIGG8tLpSooeHJb5yFVSSFiHuxi6ow"
+                    val emoji = if (isGood) "✅" else "🐞"
+                    val caption = "$emoji TaxiFilter Debug Report\n📅 $ts\n📱 ${android.os.Build.MODEL}\n📊 ${rollingLog.size} записей"
+                    val tgBody = okhttp3.MultipartBody.Builder()
+                        .setType(okhttp3.MultipartBody.FORM)
+                        .addFormDataPart("chat_id", chatId)
+                        .addFormDataPart("caption", caption)
+                        .addFormDataPart("document", file.name, logText.toByteArray().toRequestBody("text/plain".toMediaType()))
+                        .build()
+                    val tgRequest = okhttp3.Request.Builder()
+                        .url("https://api.telegram.org/bot$botToken/sendDocument")
+                        .post(tgBody)
+                        .build()
+                    okhttp3.OkHttpClient().newCall(tgRequest).execute().use { r ->
+                        Log.d(TAG, "TG report: ${r.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "TG send failed", e)
+            }
+
+            // 2. Отправка на сервер
+            try {
+                val json = org.json.JSONObject().apply {
+                    put("device_id", deviceId)
+                    put("device_model", android.os.Build.MODEL)
+                    put("is_good", isGood)
+                    put("log_text", logText)
+                }
+                val serverBody = json.toString().toByteArray().toRequestBody("application/json".toMediaType())
+                val serverRequest = okhttp3.Request.Builder()
+                    .url("$serverUrl/api/taxifilter/report")
+                    .post(serverBody)
+                    .build()
+                okhttp3.OkHttpClient().newCall(serverRequest).execute().use { r ->
+                    Log.d(TAG, "Server report: ${r.code}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Server send failed", e)
+            }
+        }.start()
+    }
+
 
     private fun playSoundAndVibrate() {
         val prefs = applicationContext.getSharedPreferences("taxi_prefs", Context.MODE_PRIVATE)
@@ -539,8 +762,10 @@ class ScreenCaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        instance = null  // 🐞 чистимся
         SmartLearningManager.save(this)
         unregisterReceiver(testReceiver)
+        try { unregisterReceiver(bugReportReceiver) } catch (e: Exception) {}
         if (currentSessionTaken > 0) {
             val summary = "🔚 СМЕНА ОКОНЧЕНА\n📦 Всего взято: $currentSessionTaken заказов\n💰 Общая сумма: ${"%.2f".format(currentSessionPrice)}zł\n⭐ Молодец!"
             TelegramSender.sendMessage(this, summary)
@@ -549,6 +774,45 @@ class ScreenCaptureService : Service() {
         virtualDisplay?.release()
         mediaProjection?.stop()
         if (wakeLock?.isHeld == true) wakeLock?.release()
+        wakeLockTimer?.cancel()
+        locationTimer?.cancel()
+        try { recognizer.close() } catch (e: Exception) {}
+        overlayController?.onActivityDestroyed()
         super.onDestroy()
+    }
+
+    private fun calculateLuminanceVariance(buffer: java.nio.ByteBuffer, width: Int, height: Int, rowStride: Int, topPct: Float, bottomPct: Float): Double {
+        // Fast luminance calculation (sampling) ONLY within ROI
+        // 100% matched with 1H PROFIT (com.onehour.profit.ScreenCaptureService.a)
+        var sum = 0.0
+        var sumSq = 0.0
+        val sampleStep = 6 
+        var count = 0
+
+        val startX = (width * 0.20).toInt()
+        val endX = (width * 0.80).toInt()
+        val startY = (height * topPct).toInt()
+        val endY = (height * bottomPct).toInt()
+
+        buffer.position(0)
+        for (y in startY until endY step sampleStep) {
+            for (x in startX until endX step sampleStep) {
+                val offset = y * rowStride + x * 4
+                if (offset + 2 < buffer.limit()) {
+                    val r = buffer.get(offset).toInt() and 0xFF
+                    val g = buffer.get(offset + 1).toInt() and 0xFF
+                    val b = buffer.get(offset + 2).toInt() and 0xFF
+                    
+                    val lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+                    sum += lum
+                    sumSq += lum * lum
+                    count++
+                }
+            }
+        }
+        
+        if (count == 0) return 0.0
+        val mean = sum / count
+        return (sumSq / count) - (mean * mean)
     }
 }

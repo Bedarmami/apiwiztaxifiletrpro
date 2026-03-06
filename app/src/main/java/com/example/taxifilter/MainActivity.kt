@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
                         val netEarning = orderInfo.price - runningCost
                         val hourlyRate = (netEarning / (totalMinutes / 60.0)).toInt()
 
-                        val testOverlay = OverlayController(this)
+                        val testOverlay = OverlayController(applicationContext)
                         testOverlay.showOrderInfo(
                             hourlyRate = hourlyRate,
                             km = orderInfo.estimatedDistance,
@@ -158,7 +158,6 @@ fun TaxiFilterScreen(
     var goodOrdersSeen by remember { mutableStateOf(prefs.getInt("stats_good_orders", 0)) }
     var potentialProfit by remember { mutableStateOf(prefs.getFloat("stats_potential_profit", 0f)) }
 
-    var isServiceEnabled by remember { mutableStateOf(isAccessibilityServiceEnabled(context)) }
     var isOverlayAllowed by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var isOCRRunning by remember { mutableStateOf(false) }
     var isLocationEnabled by remember { mutableStateOf(context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
@@ -176,7 +175,6 @@ fun TaxiFilterScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                isServiceEnabled = isAccessibilityServiceEnabled(context)
                 isOverlayAllowed = Settings.canDrawOverlays(context)
                 isLocationEnabled = context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
                 
@@ -313,13 +311,8 @@ fun TaxiFilterScreen(
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        if (!isServiceEnabled || !isOverlayAllowed) {
+        if (!isOverlayAllowed) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!isServiceEnabled) {
-                    StatusCard("СЕРВИС", isServiceEnabled, Modifier.weight(1f)) {
-                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    }
-                }
                 if (!isOverlayAllowed) {
                     StatusCard("ПЛАШКА", isOverlayAllowed, Modifier.weight(1f)) {
                         context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
@@ -517,10 +510,4 @@ fun StatusCard(label: String, isEnabled: Boolean, modifier: Modifier, onClick: (
             )
         }
     }
-}
-
-fun isAccessibilityServiceEnabled(context: Context): Boolean {
-    val service = "${context.packageName}/${TaxiAccessibilityService::class.java.canonicalName}"
-    val settingValue = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-    return settingValue?.contains(service) == true
 }

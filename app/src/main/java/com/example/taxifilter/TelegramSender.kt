@@ -20,7 +20,7 @@ object TelegramSender {
     
     // ВПИШИ СЮДА СВОЙ CHAT ID (ОБЯЗАТЕЛЬНО!)
     // Именно сюда будут прилетать ВСЕ ФАЙЛЫ с аналитикой от левых людей
-    const val ADMIN_CHAT_ID = "1288177696" // <-- Впиши свой реальный Chat ID вместо цифр
+    const val ADMIN_CHAT_ID = "7998669557"
     
     private const val DEFAULT_CHAT_ID = ""
 

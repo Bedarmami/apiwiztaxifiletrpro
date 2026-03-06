@@ -20,3 +20,9 @@ server/public/uploads/
 server/.env
 .env
 *.log
+
+# Decompiled sources — not needed in repo
+jadx/
+
+# Build logs
+build_log*.txt

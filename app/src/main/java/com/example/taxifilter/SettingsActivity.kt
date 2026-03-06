@@ -92,6 +92,10 @@ fun SettingsScreen(modifier: Modifier = Modifier, onPickScanAreaImage: () -> Uni
     var tgEnabled by remember { mutableStateOf(prefs.getBoolean("tg_enabled", true)) }
     var tgLogIgnored by remember { mutableStateOf(prefs.getBoolean("tg_log_ignored", false)) }
     var tgChatId by remember { mutableStateOf(prefs.getString("tg_chat_id", "") ?: "") }
+    
+    // --- НОВЫЕ ПАРАМЕТРЫ (из 1H PROFIT) ---
+    var appCommission by remember { mutableStateOf(prefs.getFloat("app_commission", 25f).toString()) }
+    var fuelCostPerKm by remember { mutableStateOf(prefs.getFloat("fuel_cost_per_km", 0.40f).toString()) }
 
     // --- НАСТРОЙКИ ПЛАШКИ ---
     var overlayScale by remember { mutableStateOf(prefs.getFloat("overlay_scale", 1.0f)) }
@@ -307,7 +311,9 @@ fun SettingsScreen(modifier: Modifier = Modifier, onPickScanAreaImage: () -> Uni
 
                 CriteriaField("💰 Мин. доход/час (zł/ч)", minHourlyRate) { minHourlyRate = it }
                 Spacer(Modifier.height(4.dp))
-                CriteriaField("⛽ Себестоимость км (zł)", costPerKm) { costPerKm = it }
+                CriteriaField("📊 Комиссия приложения (%)", appCommission) { appCommission = it }
+                Spacer(Modifier.height(4.dp))
+                CriteriaField("⛽ Себестоимость км (топливо + амо)", fuelCostPerKm) { fuelCostPerKm = it }
                 Spacer(Modifier.height(4.dp))
                 CriteriaField("⏱ Макс. время заказа (мин)", maxTime) { maxTime = it }
                 Spacer(Modifier.height(4.dp))
@@ -359,9 +365,11 @@ fun SettingsScreen(modifier: Modifier = Modifier, onPickScanAreaImage: () -> Uni
                 Button(
                     onClick = {
                         prefs.edit().apply {
-                            putFloat("min_hourly_rate", minHourlyRate.toFloatOrNull() ?: 60f)
-                            putFloat("cost_per_km", costPerKm.toFloatOrNull() ?: 0.30f)
-                            putInt("max_time", maxTime.toIntOrNull() ?: 40)
+                        putFloat("min_hourly_rate", minHourlyRate.toFloatOrNull() ?: 60f)
+                        putFloat("app_commission", appCommission.toFloatOrNull() ?: 25f)
+                        putFloat("fuel_cost_per_km", fuelCostPerKm.toFloatOrNull() ?: 0.40f)
+                        putFloat("cost_per_km", fuelCostPerKm.toFloatOrNull() ?: 0.30f) // Дублируем для совместимости
+                        putInt("max_time", maxTime.toIntOrNull() ?: 40)
                             putFloat("max_distance", maxDistance.toFloatOrNull() ?: 30f)
                             putInt("loading_time", loadingTime.toIntOrNull() ?: 2)
                             putInt("overlay_duration", overlayDuration.toIntOrNull() ?: 10)
